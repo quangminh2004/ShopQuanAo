@@ -28,7 +28,7 @@ const Login = () => {
       } else {
         toast.error(result.message);
       }
-    } catch(err) {
+    } catch (err) {
       setLoading(false);
       toast.error('Có lỗi xảy ra khi đăng nhập.');
     }
@@ -89,7 +89,7 @@ const Login = () => {
           <div className="auth-divider"><span>Chưa có tài khoản?</span></div>
           <Link to="/register" className="btn btn-secondary btn-block">Đăng ký ngay</Link>
 
-          <div className="auth-demo">
+          {/* <div className="auth-demo">
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>🔑 Tài khoản demo (nếu chưa có server):</p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <button type="button" className="demo-btn" onClick={() => setForm({ email: 'admin@lunina.com', password: 'admin123' })}>
@@ -102,7 +102,7 @@ const Login = () => {
                 💎 VIP Kim Cương
               </button>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
     </div>
