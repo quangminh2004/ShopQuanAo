@@ -14,7 +14,7 @@ const Register = () => {
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.username || !form.password || !form.fullName || !form.email) {
       toast.error('Vui lòng điền đầy đủ các trường bắt buộc!');
@@ -30,8 +30,8 @@ const Register = () => {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const result = register(form);
+    try {
+      const result = await register(form);
       setLoading(false);
       if (result.success) {
         toast.success('Đăng ký thành công! Chào mừng bạn đến với LUNINA! 🎉');
@@ -39,7 +39,10 @@ const Register = () => {
       } else {
         toast.error(result.message);
       }
-    }, 500);
+    } catch(err) {
+      setLoading(false);
+      toast.error('Có lỗi xảy ra khi đăng ký!');
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FiEdit2, FiSave, FiX } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
@@ -18,7 +18,21 @@ const Profile = () => {
     email: currentUser.email,
   });
 
-  const userOrders = getUserOrders(currentUser.id);
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoadingOrders(true);
+      try {
+        const data = await getUserOrders(currentUser.id);
+        setOrders(data || []);
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+    fetchOrders();
+  }, [currentUser.id]);
   const rank = currentUser.rank;
   const rankConfig = RANK_CONFIG[rank];
   const nextRank = getNextRank(rank);
@@ -50,7 +64,7 @@ const Profile = () => {
                   {currentUser.fullName.charAt(0)}
                 </div>
                 <h3 style={{ color: '#fff', marginTop: '12px', fontSize: '18px', fontWeight: 800 }}>{currentUser.fullName}</h3>
-                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>@{currentUser.username}</p>
+                <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px' }}>@{currentUser.username || currentUser.email}</p>
               </div>
 
               <div style={{ margin: '-40px 20px 0', position: 'relative', zIndex: 1 }}>
@@ -77,8 +91,8 @@ const Profile = () => {
                 {[
                   { label: '💰 Tổng chi tiêu', value: formatCurrency(currentUser.totalSpending), highlight: true },
                   { label: '⭐ Điểm tích lũy', value: `${currentUser.points?.toLocaleString() || 0} điểm` },
-                  { label: '📦 Tổng đơn hàng', value: `${userOrders.length} đơn` },
-                  { label: '✅ Đã hoàn thành', value: `${userOrders.filter((o) => o.status === 'DA_NHAN').length} đơn` },
+                  { label: '📦 Tổng đơn hàng', value: loadingOrders ? '⏳...' : `${orders.length} đơn` },
+                  { label: '✅ Đã hoàn thành', value: loadingOrders ? '⏳...' : `${orders.filter((o) => o.status === 'DA_NHAN').length} đơn` },
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--bg)', borderRadius: 'var(--radius-md)' }}>
                     <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{item.label}</span>
@@ -159,7 +173,7 @@ const Profile = () => {
                   ))}
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Tên đăng nhập</label>
-                    <p style={{ fontSize: '14px', padding: '10px 0', fontWeight: 500, color: 'var(--text-muted)' }}>{currentUser.username}</p>
+                    <p style={{ fontSize: '14px', padding: '10px 0', fontWeight: 500, color: 'var(--text-muted)' }}>{currentUser.username || currentUser.email}</p>
                   </div>
                   <div className="form-group" style={{ marginBottom: 0 }}>
                     <label className="form-label">Vai trò</label>
@@ -176,7 +190,13 @@ const Profile = () => {
             {/* Recent Orders */}
             <div className="card">
               <div className="card-header">📦 Lịch sử mua hàng gần đây</div>
-              {userOrders.length === 0 ? (
+              {loadingOrders ? (
+                <div className="card-body">
+                  <div className="empty-state" style={{ padding: '30px' }}>
+                    <div className="empty-state-title">Đang tải lịch sử...</div>
+                  </div>
+                </div>
+              ) : orders.length === 0 ? (
                 <div className="card-body">
                   <div className="empty-state" style={{ padding: '30px' }}>
                     <div className="empty-state-icon" style={{ fontSize: '36px' }}>📭</div>
@@ -196,7 +216,7 @@ const Profile = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {userOrders.slice(0, 8).map((order) => (
+                      {orders.slice(0, 8).map((order) => (
                         <tr key={order.id}>
                           <td style={{ fontWeight: 700, fontSize: '13px' }}>#{String(order.id).padStart(6, '0')}</td>
                           <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(order.orderDate)}</td>

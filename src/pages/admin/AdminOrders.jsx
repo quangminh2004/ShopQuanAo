@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FiSearch, FiChevronDown, FiChevronUp, FiEye } from 'react-icons/fi';
 import { useShop } from '../../contexts/ShopContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,11 +10,27 @@ import { toast } from 'react-toastify';
 const STATUS_OPTIONS = ['Tất cả', 'DANG_DAT', 'DA_NHAN', 'DA_HUY'];
 
 const AdminOrders = () => {
-  const { orders, updateOrderStatus } = useShop();
-  const { users } = useAuth();
+  const { getUserOrders, updateOrderStatus } = useShop();
+  const { users, currentUser } = useAuth();
+  const [orders, setOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [search, setSearch] = useState('');
   const [detailOrder, setDetailOrder] = useState(null);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoadingOrders(true);
+      try {
+        // Admin cũng gọi API GET /order để lấy toàn bộ đơn hàng
+        const result = await getUserOrders(currentUser?.id);
+        setOrders(result || []);
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+    fetchOrders();
+  }, []);
 
   const filtered = orders
     .filter((o) => statusFilter === 'Tất cả' || o.status === statusFilter)
@@ -28,15 +44,19 @@ const AdminOrders = () => {
     })
     .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
 
-  const handleStatus = (orderId, newStatus) => {
-    updateOrderStatus(orderId, newStatus);
+  const handleStatus = async (orderId, newStatus) => {
+    await updateOrderStatus(orderId, newStatus);
     toast.success('Cập nhật trạng thái thành công!');
     if (detailOrder?.id === orderId) {
       setDetailOrder((o) => ({ ...o, status: newStatus }));
     }
+    // Reload lại danh sách
+    const result = await getUserOrders(currentUser?.id);
+    setOrders(result || []);
   };
 
-  const getUser = (userId) => users.find((u) => u.id === userId);
+  // User lookup: tìm theo userId hoặc email (backend trả về email)
+  const getUser = (userId) => users.find((u) => u.id === userId || u.email === userId);
 
   return (
     <AdminLayout>
@@ -96,14 +116,18 @@ const AdminOrders = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order) => {
+                {loadingOrders ? (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>⏳ Đang tải đơn hàng...</td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>📭 Không có đơn hàng nào</td></tr>
+                ) : filtered.map((order) => {
                   const user = getUser(order.userId);
                   return (
                     <tr key={order.id}>
                       <td style={{ fontWeight: 700, fontSize: '13px' }}>#{String(order.id).padStart(6, '0')}</td>
                       <td>
-                        <div style={{ fontWeight: 600, fontSize: '14px' }}>{user?.fullName || 'N/A'}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{user?.email}</div>
+                        <div style={{ fontWeight: 600, fontSize: '14px' }}>{user?.fullName || order.userEmail || 'N/A'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{user?.email || order.userEmail || ''}</div>
                       </td>
                       <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(order.orderDate)}</td>
                       <td style={{ fontWeight: 600 }}>{order.items?.length || 0}</td>
@@ -138,9 +162,6 @@ const AdminOrders = () => {
                 })}
               </tbody>
             </table>
-            {filtered.length === 0 && (
-              <div className="empty-state"><div className="empty-state-icon">📭</div><div className="empty-state-title">Không có đơn hàng</div></div>
-            )}
           </div>
         </div>
       </div>

@@ -23,7 +23,7 @@ const Checkout = () => {
   const discountAmount = Math.round(cartTotal * discount);
   const finalTotal = cartTotal - discountAmount;
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!address.trim()) {
       toast.error('Vui lòng nhập địa chỉ giao hàng!');
       return;
@@ -33,8 +33,8 @@ const Checkout = () => {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      placeOrder({
+    try {
+      const result = await placeOrder({
         userId: currentUser.id,
         deliveryAddress: address,
         items: cartItems.map((item) => ({
@@ -45,17 +45,27 @@ const Checkout = () => {
           colorName: item.colorName,
           quantity: item.quantity,
           unitPrice: item.price,
+          price: item.price,
           imageUrl: item.imageUrl,
         })),
         totalAmount: finalTotal,
         discountApplied: discountAmount,
       });
-      addSpending(currentUser.id, finalTotal);
-      clearCart();
+
+      if (result) {
+        addSpending(currentUser.id, finalTotal);
+        clearCart();
+        toast.success('🎉 Đặt hàng thành công!');
+        navigate('/orders');
+      } else {
+        toast.error('Đặt hàng thất bại, vui lòng thử lại!');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Có lỗi xảy ra khi đặt hàng!');
+    } finally {
       setLoading(false);
-      toast.success('🎉 Đặt hàng thành công!');
-      navigate('/orders');
-    }, 800);
+    }
   };
 
   if (cartItems.length === 0) {

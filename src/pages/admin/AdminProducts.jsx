@@ -5,6 +5,7 @@ import { formatCurrency, formatDateOnly } from '../../utils/formatUtils';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Modal from '../../components/common/Modal';
 import { toast } from 'react-toastify';
+import api from '../../utils/api';
 
 const EMPTY_FORM = {
   name: '', description: '', price: '', categoryId: 1,
@@ -25,6 +26,8 @@ const AdminProducts = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [imageFile, setImageFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   // Variant states
@@ -32,6 +35,7 @@ const AdminProducts = () => {
   const [activeProductId, setActiveProductId] = useState(null);
   const [editingVariantId, setEditingVariantId] = useState(null);
   const [variantForm, setVariantForm] = useState(EMPTY_VARIANT_FORM);
+  const [variantImageFile, setVariantImageFile] = useState(null);
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
   const setV = (field) => (e) => setVariantForm({ ...variantForm, [field]: e.target.value });
@@ -45,6 +49,7 @@ const AdminProducts = () => {
   const openAdd = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setImageFile(null);
     setModalOpen(true);
   };
 
@@ -58,17 +63,49 @@ const AdminProducts = () => {
       imageUrl: product.imageUrl,
       stockQuantity: product.stockQuantity,
     });
+    setImageFile(null);
     setModalOpen(true);
   };
 
-  const handleSave = () => {
+  const uploadImage = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post('/upload/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data?.success && res.data?.data) {
+        return res.data.data;
+      }
+    } catch (err) {
+      console.warn('API Upload error:', err);
+    }
+    throw new Error('Lỗi upload ảnh!');
+  };
+
+  const handleSave = async () => {
     if (!form.name.trim() || !form.price || !form.stockQuantity) {
       toast.error('Vui lòng điền đủ thông tin bắt buộc!');
       return;
     }
+
+    let finalImageUrl = form.imageUrl;
+    if (imageFile) {
+      setUploading(true);
+      try {
+        finalImageUrl = await uploadImage(imageFile);
+      } catch (e) {
+        toast.error(e.message);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
     if (editingId) {
       updateProduct(editingId, {
         ...form,
+        imageUrl: finalImageUrl,
         price: parseFloat(form.price),
         stockQuantity: parseInt(form.stockQuantity),
         categoryId: parseInt(form.categoryId),
@@ -77,6 +114,7 @@ const AdminProducts = () => {
     } else {
       addProduct({
         ...form,
+        imageUrl: finalImageUrl,
         price: parseFloat(form.price),
         stockQuantity: parseInt(form.stockQuantity),
         categoryId: parseInt(form.categoryId),
@@ -99,19 +137,35 @@ const AdminProducts = () => {
   const openVariants = (product) => {
     setActiveProductId(product.id);
     setVariantForm(EMPTY_VARIANT_FORM);
+    setVariantImageFile(null);
     setEditingVariantId(null);
     setVariantModalOpen(true);
   };
 
-  const handleSaveVariant = () => {
+  const handleSaveVariant = async () => {
     if (!variantForm.sizeName?.trim() && !variantForm.colorName?.trim()) {
       toast.error('Cần nhập Kích cỡ hoặc Màu sắc!'); return;
     }
     if (!variantForm.price || !variantForm.stock) {
       toast.error('Cần nhập giá và tồn kho riêng cho phân loại này!'); return;
     }
+
+    let finalImageUrl = variantForm.variantImageUrl;
+    if (variantImageFile) {
+      setUploading(true);
+      try {
+        finalImageUrl = await uploadImage(variantImageFile);
+      } catch (e) {
+        toast.error(e.message);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
     const data = {
       ...variantForm,
+      variantImageUrl: finalImageUrl,
       productId: activeProductId,
       price: parseFloat(variantForm.price),
       stock: parseInt(variantForm.stock),
@@ -136,6 +190,23 @@ const AdminProducts = () => {
       stock: v.stock || 0,
       variantImageUrl: v.variantImageUrl || '',
     });
+    setVariantImageFile(null);
+  };
+
+  const handleImageSelect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setForm({ ...form, imageUrl: URL.createObjectURL(file) });
+    }
+  };
+
+  const handleVariantImageSelect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setVariantImageFile(file);
+      setVariantForm({ ...variantForm, variantImageUrl: URL.createObjectURL(file) });
+    }
   };
 
   return (
@@ -247,8 +318,10 @@ const AdminProducts = () => {
         title={editingId ? '✏️ Sửa sản phẩm' : '➕ Thêm sản phẩm mới'}
         footer={
           <>
-            <button className="btn btn-ghost" onClick={() => setModalOpen(false)}><FiX /> Hủy</button>
-            <button className="btn btn-primary" onClick={handleSave}><FiSave /> {editingId ? 'Cập nhật' : 'Thêm mới'}</button>
+            <button className="btn btn-ghost" onClick={() => setModalOpen(false)} disabled={uploading}><FiX /> Hủy</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={uploading}>
+              <FiSave /> {uploading ? 'Đang tải ảnh...' : (editingId ? 'Cập nhật' : 'Thêm mới')}
+            </button>
           </>
         }
       >
@@ -273,8 +346,11 @@ const AdminProducts = () => {
           </select>
         </div>
         <div className="form-group">
-          <label className="form-label">URL ảnh sản phẩm</label>
-          <input className="form-input" type="text" placeholder="https://images.unsplash.com/..." value={form.imageUrl} onChange={set('imageUrl')} />
+          <label className="form-label">Ảnh sản phẩm</label>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+            <input type="file" accept="image/*" onChange={handleImageSelect} className="form-input" style={{ flex: 1, minWidth: '200px', padding: '6px' }} />
+            <input className="form-input" type="text" placeholder="Hoặc dán URL..." value={form.imageUrl} onChange={set('imageUrl')} style={{ flex: 1, minWidth: '200px' }} />
+          </div>
           {form.imageUrl && (
             <img src={form.imageUrl} alt="preview" style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '10px', marginTop: '8px' }}
               onError={(e) => { e.target.style.display = 'none'; }} />
@@ -335,18 +411,19 @@ const AdminProducts = () => {
               </div>
               <div className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
                 <label className="form-label" style={{ fontSize: '12px' }}>Ảnh phân loại (tùy chọn)</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input className="form-input" style={{ padding: '6px 12px', fontSize: '14px', flex: 1 }} type="text" placeholder="https://..." value={variantForm.variantImageUrl} onChange={setV('variantImageUrl')} />
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <input type="file" accept="image/*" onChange={handleVariantImageSelect} className="form-input" style={{ flex: 1, minWidth: '150px', padding: '6px' }} />
+                  <input className="form-input" style={{ padding: '6px 12px', fontSize: '14px', flex: 1, minWidth: '150px' }} type="text" placeholder="Hoặc dán URL..." value={variantForm.variantImageUrl} onChange={setV('variantImageUrl')} />
                   {variantForm.variantImageUrl && <img src={variantForm.variantImageUrl} alt="preview" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />}
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-              <button className="btn btn-primary btn-sm" onClick={handleSaveVariant}>
-                {editingVariantId ? 'Lưu cập nhật' : '+ Lưu phân loại'}
+              <button className="btn btn-primary btn-sm" onClick={handleSaveVariant} disabled={uploading}>
+                {uploading ? 'Đang tải ảnh...' : (editingVariantId ? 'Lưu cập nhật' : '+ Lưu phân loại')}
               </button>
               {editingVariantId && (
-                <button className="btn btn-ghost btn-sm" onClick={() => { setEditingVariantId(null); setVariantForm(EMPTY_VARIANT_FORM); }}>Hủy</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => { setEditingVariantId(null); setVariantForm(EMPTY_VARIANT_FORM); }} disabled={uploading}>Hủy</button>
               )}
             </div>
           </div>

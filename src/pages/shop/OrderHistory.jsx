@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FiPackage, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
@@ -20,17 +20,34 @@ const OrderHistory = () => {
   const [tab, setTab] = useState('all');
   const [expandedId, setExpandedId] = useState(null);
 
-  const allOrders = getUserOrders(currentUser.id);
+  const [allOrders, setAllOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoading(true);
+      const result = await getUserOrders(currentUser.id);
+      setAllOrders(result);
+      setLoading(false);
+    };
+    fetchOrders();
+  }, [currentUser.id]);
+
   const filtered = tab === 'all' ? allOrders : allOrders.filter((o) => o.status === tab);
 
-  const handleReceive = (orderId) => {
-    updateOrderStatus(orderId, 'DA_NHAN');
+  const handleReceive = async (orderId) => {
+    await updateOrderStatus(orderId, 'DA_NHAN');
     toast.success('Đã xác nhận nhận hàng!');
+    // Reload lại danh sách
+    const result = await getUserOrders(currentUser.id);
+    setAllOrders(result);
   };
 
-  const handleCancel = (orderId) => {
-    updateOrderStatus(orderId, 'DA_HUY');
+  const handleCancel = async (orderId) => {
+    await updateOrderStatus(orderId, 'DA_HUY');
     toast.info('Đã hủy đơn hàng.');
+    const result = await getUserOrders(currentUser.id);
+    setAllOrders(result);
   };
 
   return (
@@ -62,7 +79,9 @@ const OrderHistory = () => {
           ))}
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>⏳ Đang tải đơn hàng...</div>
+        ) : filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">📦</div>
             <div className="empty-state-title">Chưa có đơn hàng</div>

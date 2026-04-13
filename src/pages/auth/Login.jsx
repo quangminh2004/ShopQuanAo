@@ -8,27 +8,30 @@ import './Auth.css';
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ email: '', password: '' });
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.username || !form.password) {
-      toast.error('Vui lòng điền đầy đủ thông tin!');
+    if (!form.email || !form.password) {
+      toast.error('Vui lòng nhập email và mật khẩu!');
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const result = login(form.username, form.password);
+    try {
+      const result = await login(form.email, form.password);
       setLoading(false);
       if (result.success) {
-        toast.success(`Chào mừng, ${result.user.fullName}! 👋`);
+        toast.success(`Chào mừng, ${result.user.fullName || result.user.username}! 👋`);
         navigate(result.user.role === 'ADMIN' ? '/admin' : '/');
       } else {
         toast.error(result.message);
       }
-    }, 500);
+    } catch(err) {
+      setLoading(false);
+      toast.error('Có lỗi xảy ra khi đăng nhập.');
+    }
   };
 
   return (
@@ -45,13 +48,13 @@ const Login = () => {
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
-              <label className="form-label">Tên đăng nhập</label>
+              <label className="form-label">Email</label>
               <input
                 className="form-input"
-                type="text"
-                placeholder="Nhập tên đăng nhập..."
-                value={form.username}
-                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                type="email"
+                placeholder="Nhập email đăng nhập..."
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
                 autoFocus
               />
             </div>
@@ -87,15 +90,15 @@ const Login = () => {
           <Link to="/register" className="btn btn-secondary btn-block">Đăng ký ngay</Link>
 
           <div className="auth-demo">
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>🔑 Tài khoản demo:</p>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600 }}>🔑 Tài khoản demo (nếu chưa có server):</p>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button type="button" className="demo-btn" onClick={() => setForm({ username: 'admin', password: 'admin123' })}>
+              <button type="button" className="demo-btn" onClick={() => setForm({ email: 'admin@lunina.com', password: 'admin123' })}>
                 👑 Admin
               </button>
-              <button type="button" className="demo-btn" onClick={() => setForm({ username: 'user1', password: 'user123' })}>
+              <button type="button" className="demo-btn" onClick={() => setForm({ email: 'user1@lunina.com', password: 'user123' })}>
                 👤 User thường
               </button>
-              <button type="button" className="demo-btn" onClick={() => setForm({ username: 'user3', password: 'user123' })}>
+              <button type="button" className="demo-btn" onClick={() => setForm({ email: 'vip@lunina.com', password: 'user123' })}>
                 💎 VIP Kim Cương
               </button>
             </div>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FiSearch, FiEye } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
+import api from '../../utils/api';
 import { RANK_CONFIG, getRankProgress, getNextRank } from '../../utils/rankUtils';
 import { formatCurrency, formatDate, ORDER_STATUS_LABEL, ORDER_STATUS_COLOR } from '../../utils/formatUtils';
 import RankBadge from '../../components/common/RankBadge';
@@ -9,19 +10,65 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import Modal from '../../components/common/Modal';
 
 const AdminCustomers = () => {
-  const { users } = useAuth();
+  const { users: localUsers } = useAuth();
   const { getUserOrders } = useShop();
+  const [apiUsers, setApiUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [search, setSearch] = useState('');
   const [rankFilter, setRankFilter] = useState('Tất cả');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUserOrders, setSelectedUserOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
+  // Hiển thị users từ API nếu có, fallback về localStorage
+  const users = apiUsers.length > 0 ? apiUsers : localUsers;
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      try {
+        const res = await api.get('/user?page=1&size=1000');
+        if (res.data?.data) {
+          // Map từ backend schema: { id, fullName, email, address, totalSpending, points, rank, role }
+          const mapped = res.data.data.map(u => ({
+            id: u.id,
+            fullName: u.fullName || 'Chưa có tên',
+            email: u.email,
+            address: u.address,
+            totalSpending: u.totalSpending || 0,
+            points: u.points || 0,
+            rank: u.rank || 'NORMAL',
+            role: u.role || 'USER',
+            username: u.email, // Dùng email làm username hiển thị
+          }));
+          setApiUsers(mapped);
+        }
+      } catch(err) {
+        console.warn('API fetch users fail:', err);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  const handleSelectUser = async (u) => {
+    setSelectedUser(u);
+    setLoadingOrders(true);
+    try {
+      const orders = await getUserOrders(u.id);
+      setSelectedUserOrders(orders || []);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
 
   const customers = users.filter((u) => u.role === 'USER');
 
   const filtered = customers.filter((u) => {
     const matchSearch = !search.trim() ||
-      u.fullName.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.username.toLowerCase().includes(search.toLowerCase());
+      (u.fullName || '').toLowerCase().includes(search.toLowerCase()) ||
+      (u.email || '').toLowerCase().includes(search.toLowerCase());
     const matchRank = rankFilter === 'Tất cả' || u.rank === rankFilter;
     return matchSearch && matchRank;
   });
@@ -80,7 +127,6 @@ const AdminCustomers = () => {
               <thead>
                 <tr>
                   <th>Khách hàng</th>
-                  <th>Username</th>
                   <th>Hạng thẻ</th>
                   <th>Tổng chi tiêu</th>
                   <th>Điểm tích lũy</th>
@@ -107,15 +153,14 @@ const AdminCustomers = () => {
                         </div>
                       </div>
                     </td>
-                    <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>@{u.username}</td>
                     <td><RankBadge rank={u.rank} size="sm" /></td>
                     <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(u.totalSpending)}</td>
                     <td style={{ fontWeight: 700, color: '#f9a825' }}>⭐ {u.points?.toLocaleString() || 0}</td>
                     <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(u.createdAt)}</td>
                     <td style={{ textAlign: 'center' }}>
-                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setSelectedUser(u)}>
-                        <FiEye style={{ color: 'var(--info)' }} />
-                      </button>
+                       <button className="btn btn-ghost btn-sm btn-icon" onClick={() => handleSelectUser(u)}>
+                         <FiEye style={{ color: 'var(--info)' }} />
+                       </button>
                     </td>
                   </tr>
                 ))}
@@ -136,8 +181,8 @@ const AdminCustomers = () => {
         size="lg"
       >
         {selectedUser && (() => {
-          const orders = getUserOrders(selectedUser.id);
-          const rankCfg = RANK_CONFIG[selectedUser.rank];
+          const orders = selectedUserOrders;
+          const rankCfg = RANK_CONFIG[selectedUser.rank] || RANK_CONFIG['NORMAL'];
           const nextRank = getNextRank(selectedUser.rank);
           const progress = getRankProgress(selectedUser.totalSpending, selectedUser.rank);
           return (
@@ -149,7 +194,7 @@ const AdminCustomers = () => {
                 </div>
                 <div style={{ flex: 1, color: '#fff' }}>
                   <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '2px' }}>{selectedUser.fullName}</div>
-                  <div style={{ fontSize: '13px', opacity: 0.8 }}>@{selectedUser.username} · {selectedUser.email}</div>
+                  <div style={{ fontSize: '13px', opacity: 0.8 }}>{selectedUser.email}</div>
                 </div>
                 <div style={{ textAlign: 'right', color: '#fff' }}>
                   <div style={{ fontSize: '12px', opacity: 0.8, marginBottom: '4px' }}>Hạng thẻ</div>
@@ -162,7 +207,7 @@ const AdminCustomers = () => {
                 {[
                   { label: 'Tổng chi tiêu', value: formatCurrency(selectedUser.totalSpending), color: 'var(--primary)' },
                   { label: 'Điểm tích lũy', value: `⭐ ${selectedUser.points?.toLocaleString() || 0}`, color: '#f9a825' },
-                  { label: 'Tổng đơn hàng', value: `${orders.length} đơn`, color: '#1565c0' },
+                  { label: 'Tổng đơn hàng', value: loadingOrders ? '⏳...' : `${orders.length} đơn`, color: '#1565c0' },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{ background: 'var(--bg)', borderRadius: 'var(--radius-md)', padding: '14px', textAlign: 'center' }}>
                     <div style={{ fontSize: '18px', fontWeight: 800, color, marginBottom: '4px' }}>{value}</div>
