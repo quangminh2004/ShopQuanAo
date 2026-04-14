@@ -189,7 +189,7 @@ export const ShopProvider = ({ children }) => {
       price: data.price,
       stock: data.stock,
       variantImageUrl: data.variantImageUrl || '',
-      productId: data.productId, 
+      productId: data.productId,
       product: { id: data.productId }
     };
     await api.put(`/product-variant/${id}`, payload);
@@ -209,10 +209,10 @@ export const ShopProvider = ({ children }) => {
       const orderDate = new Date().toISOString();
       const orderRes = await api.post('/order', {
         userId,
-        orderDate, 
-        deliveryAddress, 
-        totalAmount, 
-        discountApplied 
+        orderDate,
+        deliveryAddress,
+        totalAmount,
+        discountApplied
       });
       if (!orderRes.data?.data) throw new Error(orderRes.data?.message || 'Không thể tạo đơn hàng');
 
@@ -232,9 +232,9 @@ export const ShopProvider = ({ children }) => {
       } catch (err) {
         // Log the actual error to help debugging
         console.error('Failed to create order detail:', err.response?.data || err.message);
-        
-        try { await api.delete(`/order/${orderId}`); } catch(e) {} // Rollback order
-        
+
+        try { await api.delete(`/order/${orderId}`); } catch (e) { } // Rollback order
+
         const backendMsg = err.response?.data?.message;
         throw new Error(backendMsg || 'Lỗi khi tạo chi tiết đơn hàng. Vui lòng kiểm tra lại sản phẩm.');
       }
@@ -253,7 +253,7 @@ export const ShopProvider = ({ children }) => {
       const getRes = await api.get(`/order/${orderId}`);
       if (!getRes.data?.data) throw new Error('Không tìm thấy đơn hàng trên server');
       const order = getRes.data.data;
-      
+
       let statusEnum = 0; // DANG_DAT
       if (status === 1) statusEnum = 1;
       if (status === 2) statusEnum = 2;
@@ -273,14 +273,13 @@ export const ShopProvider = ({ children }) => {
     }
   };
 
-  const getUserOrders = async (userId) => {
+  const getUserOrders = async (userId, returnAll = false) => {
     const res = await api.get('/order');
     if (!res.data?.data) return [];
 
     const apiOrders = await Promise.all(res.data.data.map(async (o) => {
       let items = [];
       try {
-        // Sử dụng API mới để lấy chi tiết cho từng đơn hàng thay vì lấy toàn bộ
         const detailRes = await api.get(`/order-detail/get-by-orderid?uid=${o.id}`);
         if (detailRes.data?.data) {
           items = detailRes.data.data.map(d => ({
@@ -311,12 +310,11 @@ export const ShopProvider = ({ children }) => {
       };
     }));
 
-    // Lọc đơn hàng của user hiện tại nếu cần
-    const userOrders = apiOrders.filter(o => o.userId === userId || !o.userId); 
-    // ^ Tùy logic DB, nếu API /order đã lọc theo User rồi thì bỏ dòng filter này.
-
-    setOrders(userOrders);
-    return userOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
+    setOrders(apiOrders);
+    
+    // Nếu truyền returnAll = true, trả về toàn bộ. Ngược lại lọc theo userId
+    const finalOrders = returnAll ? apiOrders : apiOrders.filter(o => o.userId === userId);
+    return finalOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
   };
 
   return (

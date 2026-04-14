@@ -1,71 +1,58 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useShop } from '../../contexts/ShopContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency } from '../../utils/formatUtils';
+import api from '../../utils/api';
 import AdminLayout from '../../components/layout/AdminLayout';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
-const MONTH_NAMES = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
-
 const AdminDashboard = () => {
-  const { orders, products } = useShop();
+  const { orders } = useShop();
   const { users } = useAuth();
+  const [stats, setStats] = useState(null);
 
-  const totalRevenue = orders
-    .filter((o) => o.status === 1)
-    .reduce((s, o) => s + o.totalAmount, 0);
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await api.get('/api/v1/admin/dashboard/summary');
+        if (res.data?.data) {
+          setStats(res.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard stats', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
-  const totalOrders = orders.length;
-  const completedOrders = orders.filter((o) => o.status === 1).length;
-  const pendingOrders = orders.filter((o) => o.status === 0).length;
-  const totalCustomers = users.filter((u) => u.role === 'USER').length;
+  const totalRevenue = stats?.totalRevenue || 0;
+  const totalOrders = stats?.totalOrders || 0;
+  const pendingOrders = stats?.processingOrders || 0;
+  const totalCustomers = stats?.totalCustomers || 0;
 
-  // Monthly revenue (last 6 months)
   const monthlyData = useMemo(() => {
-    const now = new Date();
-    const months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
-      return {
-        month: MONTH_NAMES[d.getMonth()],
-        year: d.getFullYear(),
-        mIndex: d.getMonth(),
-        yIndex: d.getFullYear(),
-        revenue: 0,
-        orders: 0,
-      };
-    });
+    if (!stats || !stats.revenueChart) return [];
+    return stats.revenueChart.map(m => ({
+      name: m.month,
+      'Doanh thu (tr)': Math.round((m.revenue || 0) / 1000000),
+      'Đơn hàng': m.orderCount || 0
+    }));
+  }, [stats]);
 
-    orders.filter((o) => o.status === 1).forEach((o) => {
-      const d = new Date(o.orderDate);
-      const found = months.find((m) => m.mIndex === d.getMonth() && m.yIndex === d.getFullYear());
-      if (found) { found.revenue += o.totalAmount; found.orders += 1; }
-    });
-
-    return months.map((m) => ({ name: m.month, 'Doanh thu (tr)': Math.round(m.revenue / 1000000), 'Đơn hàng': m.orders }));
-  }, [orders]);
-
-  // Top products
-  const topProducts = useMemo(() => {
-    const soldMap = {};
-    orders.forEach((o) => {
-      o.items?.forEach((item) => {
-        soldMap[item.productId] = (soldMap[item.productId] || 0) + item.quantity;
-      });
-    });
-    return Object.entries(soldMap)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-      .map(([id, qty]) => {
-        const p = products.find((p) => p.id === parseInt(id));
-        return { name: p?.name || 'Không rõ', quantity: qty, revenue: qty * (p?.price || 0) };
-      });
-  }, [orders, products]);
+  const topProductsList = useMemo(() => {
+    if (!stats || !stats.topProducts) return [];
+    return stats.topProducts.map(p => ({
+      name: p.productName || 'Không rõ',
+      quantity: p.totalSold || 0,
+      revenue: p.totalRevenue || 0
+    }));
+  }, [stats]);
 
   const statCards = [
-    { icon: '💰', label: 'Doanh thu', value: formatCurrency(totalRevenue), color: 'var(--primary)', trend: '↑ Từ đơn hoàn thành' },
-    { icon: '📦', label: 'Tổng đơn hàng', value: totalOrders, color: '#1565c0', trend: `${completedOrders} hoàn thành` },
+    { icon: '💰', label: 'Doanh thu', value: formatCurrency(totalRevenue), color: 'var(--primary)', trend: 'Hôm nay / Tuần này' },
+    { icon: '📦', label: 'Tổng đơn hàng', value: totalOrders, color: '#1565c0', trend: 'Tất cả đơn hàng' },
     { icon: '⏳', label: 'Đang xử lý', value: pendingOrders, color: 'var(--warning)', trend: 'Cần xác nhận' },
     { icon: '👥', label: 'Khách hàng', value: totalCustomers, color: 'var(--success)', trend: 'Thành viên đã đăng ký' },
   ];
@@ -117,8 +104,8 @@ const AdminDashboard = () => {
           <div className="card">
             <div className="card-header">🔥 Sản phẩm bán chạy</div>
             <div className="card-body" style={{ padding: '8px 16px' }}>
-              {topProducts.map((p, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < topProducts.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
+              {topProductsList.map((p, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: i < topProductsList.length - 1 ? '1px solid var(--border-light)' : 'none' }}>
                   <div style={{
                     width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
                     background: i === 0 ? '#f9a825' : i === 1 ? '#bdbdbd' : i === 2 ? '#bf6a3e' : 'var(--bg)',
@@ -155,13 +142,13 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {[...orders].sort((a,b) => new Date(b.orderDate) - new Date(a.orderDate)).slice(0,8).map((order) => {
+                {[...orders].sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate)).slice(0, 8).map((order) => {
                   const user = users.find((u) => u.id === order.userId);
                   const colors = { 0: '#f9a825', 1: '#2e7d32', 2: '#c62828' };
                   const labels = { 0: 'Đang đặt', 1: 'Đã nhận', 2: 'Đã hủy' };
                   return (
                     <tr key={order.id}>
-                      <td style={{ fontWeight: 700, fontSize: '13px' }}>#{String(order.id).padStart(6,'0')}</td>
+                      <td style={{ fontWeight: 700, fontSize: '13px' }}>#{String(order.id).padStart(6, '0')}</td>
                       <td style={{ fontSize: '13px' }}>{user?.fullName || 'N/A'}</td>
                       <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                         {new Date(order.orderDate).toLocaleDateString('vi-VN')}

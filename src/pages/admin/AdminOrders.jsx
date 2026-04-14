@@ -22,8 +22,8 @@ const AdminOrders = () => {
     const fetchOrders = async () => {
       setLoadingOrders(true);
       try {
-        // Admin cũng gọi API GET /order để lấy toàn bộ đơn hàng
-        const result = await getUserOrders(currentUser?.id);
+        // Gọi getUserOrders với tham số thứ 2 là true để lấy TẤT CẢ đơn hàng 
+        const result = await getUserOrders(currentUser?.id, true);
         setOrders(result || []);
       } finally {
         setLoadingOrders(false);
@@ -50,8 +50,8 @@ const AdminOrders = () => {
     if (detailOrder?.id === orderId) {
       setDetailOrder((o) => ({ ...o, status: newStatus }));
     }
-    // Reload lại danh sách
-    const result = await getUserOrders(currentUser?.id);
+    // Reload lại danh sách (Lưu ý: true để admin luôn thấy tất cả)
+    const result = await getUserOrders(currentUser?.id, true);
     setOrders(result || []);
   };
 
