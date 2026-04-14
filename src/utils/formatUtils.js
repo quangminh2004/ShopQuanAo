@@ -6,25 +6,38 @@ export const formatCurrency = (amount) => {
   }).format(amount);
 };
 
+const parseBackendDate = (dateStr) => {
+  if (!dateStr) return null;
+  const raw = String(dateStr).trim();
+  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(raw);
+  const normalized = hasTimezone ? raw : `${raw}Z`;
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+};
+
 export const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
+  const d = parseBackendDate(dateStr);
+  if (!d) return '';
   return d.toLocaleDateString('vi-VN', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Ho_Chi_Minh',
   });
 };
 
 export const formatDateOnly = (dateStr) => {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
+  const d = parseBackendDate(dateStr);
+  if (!d) return '';
   return d.toLocaleDateString('vi-VN', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: 'Asia/Ho_Chi_Minh',
   });
 };
 
