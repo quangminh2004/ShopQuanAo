@@ -12,7 +12,7 @@ import { toast } from 'react-toastify';
 
 const Checkout = () => {
   const { cartItems, cartTotal, clearCart, removeFromCart } = useCart();
-  const { currentUser, addSpending } = useAuth();
+  const { currentUser } = useAuth();
   const { placeOrder } = useShop();
   const navigate = useNavigate();
 
@@ -30,6 +30,11 @@ const Checkout = () => {
     }
     if (cartItems.length === 0) {
       toast.error('Giỏ hàng trống!');
+      return;
+    }
+    // Block mock users from ordering on REAL backend
+    if (currentUser?.id > 1000000000000) {
+      toast.error('Tài khoản của bạn chưa được đồng bộ với máy chủ (tài khoản offline). Vui lòng đăng ký lại tài khoản thật!');
       return;
     }
     setLoading(true);
@@ -53,7 +58,6 @@ const Checkout = () => {
       });
 
       if (result) {
-        addSpending(currentUser.id, finalTotal);
         clearCart();
         toast.success('🎉 Đặt hàng thành công!');
         navigate('/orders');
@@ -62,7 +66,7 @@ const Checkout = () => {
       }
     } catch (err) {
       console.error(err);
-      toast.error('Có lỗi xảy ra khi đặt hàng!');
+      toast.error(err.message || 'Có lỗi xảy ra khi đặt hàng!');
     } finally {
       setLoading(false);
     }

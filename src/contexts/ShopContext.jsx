@@ -1,371 +1,330 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_CATEGORIES, INITIAL_PRODUCT_VARIANTS } from '../data/mockData';
 import api from '../utils/api';
 
 const ShopContext = createContext(null);
 
 export const ShopProvider = ({ children }) => {
-  const [products, setProducts] = useState(() => {
-    const stored = localStorage.getItem('lunina_products');
-    return stored ? JSON.parse(stored) : INITIAL_PRODUCTS;
-  });
+  // Khởi tạo rỗng — dữ liệu thật luôn từ API
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]); // Luôn lấy từ API, không dùng mock
+  const [variants, setVariants] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loadingShop, setLoadingShop] = useState(true);
 
-  const [categories, setCategories] = useState(() => {
-    const stored = localStorage.getItem('lunina_categories');
-    return stored ? JSON.parse(stored) : INITIAL_CATEGORIES;
-  });
+  // Xóa stale localStorage khi khởi động
+  useEffect(() => {
+    localStorage.removeItem('lunina_products');
+    localStorage.removeItem('lunina_categories');
+    localStorage.removeItem('lunina_variants');
+    localStorage.removeItem('lunina_orders');
+  }, []);
 
-  const [variants, setVariants] = useState(() => {
-    const stored = localStorage.getItem('lunina_variants');
-    return stored ? JSON.parse(stored) : INITIAL_PRODUCT_VARIANTS;
-  });
-
-  const [orders, setOrders] = useState(() => {
-    const stored = localStorage.getItem('lunina_orders');
-    return stored ? JSON.parse(stored) : INITIAL_ORDERS;
-  });
-
+  // ---- Fetch dữ liệu khởi đầu từ API ----
   useEffect(() => {
     const fetchInitialData = async () => {
+      setLoadingShop(true);
+
+      // Fetch Products
       try {
-        const [prodRes, catRes] = await Promise.all([
-          api.get('/product'),
-          api.get('/categories?page=1&size=1000')
-        ]);
-        
-        // Map backend product data to internal structure
-        if (prodRes.data?.data) {
-          const backendProducts = prodRes.data.data.map(p => ({
+        const prodRes = await api.get('/product');
+        const prodData = prodRes.data?.data;
+        if (Array.isArray(prodData)) {
+          const mapped = prodData.map(p => ({
             id: p.id,
             name: p.name,
-            description: p.description,
-            price: p.basePrice || p.price || 0, // Fallback if API uses basePrice
-            imageUrl: p.imageUrl,
-            categoryId: p.category?.id || 1,
-            stockQuantity: p.stockQuantity ?? 100, // mock stock if not returned
+            description: p.description || '',
+            price: p.basePrice || p.price || 0,
+            imageUrl: p.imageUrl || '',
+            categoryId: p.category?.id || null,
+            stockQuantity: p.stockQuantity ?? 0,
             sold: p.sold ?? 0,
-            createdAt: new Date().toISOString()
+            createdAt: p.createdAt || new Date().toISOString(),
           }));
-          setProducts(backendProducts);
-          localStorage.setItem('lunina_products', JSON.stringify(backendProducts));
-        }
+          setProducts(mapped);
 
-        if (catRes.data?.data) {
-          setCategories(catRes.data.data);
-          localStorage.setItem('lunina_categories', JSON.stringify(catRes.data.data));
-        }
-
-        // Variants lấy từ variants đã embedded sẵn trong list product (vì GET /product-variant không trả về productId)
-        try {
+          // Extract variants từ products
           const allVariants = [];
-          (prodRes.data.data || []).forEach(p => {
-            if (Array.isArray(p.variants)) {
-              p.variants.forEach(v => {
-                allVariants.push({
-                  id: v.id,
-                  productId: p.id,       // Gán productId từ product cha
-                  sizeName: v.sizeName,
-                  colorName: v.colorName,
-                  price: v.price || 0,
-                  stock: v.stock || 0,
-                  variantImageUrl: v.variantImageUrl,
-                });
+          prodData.forEach(p => {
+            (p.variants || []).forEach(v => {
+              allVariants.push({
+                id: v.id,
+                productId: p.id,
+                sizeName: v.sizeName,
+                colorName: v.colorName,
+                price: v.price || 0,
+                stock: v.stock || 0,
+                variantImageUrl: v.variantImageUrl || '',
               });
-            }
+            });
           });
-          if (allVariants.length > 0) {
-            setVariants(allVariants);
-            localStorage.setItem('lunina_variants', JSON.stringify(allVariants));
-          }
-        } catch(e) { console.warn('Could not extract variants from products.', e); }
-
+          setVariants(allVariants);
+        }
       } catch (err) {
-        console.warn("Failed to fetch shop data from API, using local storage fallback", err);
+        console.warn('Failed to fetch products:', err);
       }
+
+      // Fetch Categories
+      try {
+        const catRes = await api.get('/categories?page=1&size=1000');
+        const catData = catRes.data?.data;
+        if (Array.isArray(catData) && catData.length > 0) {
+          setCategories(catData);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch categories:', err);
+      }
+
+      setLoadingShop(false);
     };
+
     fetchInitialData();
   }, []);
 
-  // ---- Persist helpers (Fallback updates) ----
-  const persistProducts = (u) => { localStorage.setItem('lunina_products', JSON.stringify(u)); setProducts(u); };
-  const persistCategories = (u) => { localStorage.setItem('lunina_categories', JSON.stringify(u)); setCategories(u); };
-  const persistVariants = (u) => { localStorage.setItem('lunina_variants', JSON.stringify(u)); setVariants(u); };
-  const persistOrders = (u) => { localStorage.setItem('lunina_orders', JSON.stringify(u)); setOrders(u); };
-
   // ---- Category CRUD ----
-  // POST /categories: { name, description }
-  // PUT /categories/{id}: { name, description }
-  const addCategory = async (data) => {
+  // Re-fetch toàn bộ từ API để đảm bảo ID đúng từ DB
+  const refreshCategories = async () => {
     try {
-      // Chỉ gửi đúng trường theo schema
-      const payload = { name: data.name, description: data.description || '' };
-      const res = await api.post('/categories', payload);
-      if (res.data?.data) {
-        const newCat = res.data.data; // { id, name, description }
-        persistCategories([...categories, newCat]);
-        return newCat;
-      }
-    } catch(err) { console.warn('API addCategory fail:', err); }
-    // Fallback
-    const newCat = { ...data, id: Date.now() };
-    persistCategories([...categories, newCat]);
-    return newCat;
+      const res = await api.get('/categories?page=1&size=1000');
+      const catData = res.data?.data;
+      if (Array.isArray(catData)) setCategories(catData);
+    } catch (err) {
+      console.warn('Failed to refresh categories:', err);
+    }
+  };
+
+  const addCategory = async (data) => {
+    const res = await api.post('/categories', { name: data.name, description: data.description || '' });
+    if (!res.data?.data) throw new Error('Không thể tạo danh mục');
+    await refreshCategories(); // Re-fetch để lấy ID chính xác từ DB
+    return res.data.data;
   };
 
   const updateCategory = async (id, data) => {
-    try {
-      const payload = { name: data.name, description: data.description || '' };
-      await api.put(`/categories/${id}`, payload);
-    } catch(err) { console.warn('API updateCategory fail:', err); }
-    persistCategories(categories.map((c) => c.id === id ? { ...c, ...data } : c));
+    await api.put(`/categories/${id}`, { name: data.name, description: data.description || '' });
+    await refreshCategories();
   };
 
   const deleteCategory = async (id) => {
-    try { await api.delete(`/categories/${id}`); } catch(err) { console.warn('API deleteCategory fail:', err); }
-    persistCategories(categories.filter((c) => c.id !== id));
+    await api.delete(`/categories/${id}`);
+    await refreshCategories();
   };
-  const getCategoryName = (categoryId) => categories.find((c) => c.id === categoryId)?.name || '—';
+
+  const getCategoryName = (categoryId) => categories.find(c => c.id === categoryId)?.name || '—';
 
   // ---- Product CRUD ----
   const addProduct = async (data) => {
-    try {
-      // Backend expects category to be an object usually, or just ID if mapped correctly. 
-      // We pass the category nested object as per your schema.
-      const payload = {
-        name: data.name,
-        description: data.description,
-        basePrice: data.price,
-        imageUrl: data.imageUrl,
-        category: { id: data.categoryId }
-      };
-      const res = await api.post('/product', payload);
-      if (res.data?.data) {
-        const newProduct = { ...data, id: res.data.data.id, price: res.data.data.basePrice || payload.basePrice, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sold: 0 };
-        persistProducts([...products, newProduct]);
-        return newProduct;
-      }
-    } catch(err) { console.warn("API Add Product fail:", err); }
-
-    // Fallback
-    const newProduct = { ...data, id: Date.now(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sold: 0 };
-    persistProducts([...products, newProduct]);
+    const payload = {
+      name: data.name,
+      description: data.description || '',
+      basePrice: data.price,
+      imageUrl: data.imageUrl || '',
+      stockQuantity: data.stockQuantity || 0,
+      categoryId: parseInt(data.categoryId),
+    };
+    const res = await api.post('/product', payload);
+    if (!res.data?.data) throw new Error('Không thể tạo sản phẩm');
+    const p = res.data.data;
+    const newProduct = {
+      id: p.id,
+      name: p.name || data.name,
+      description: p.description || data.description,
+      price: p.basePrice || p.price || data.price,
+      imageUrl: p.imageUrl || data.imageUrl,
+      categoryId: p.category?.id || data.categoryId,
+      stockQuantity: data.stockQuantity || 0,
+      sold: 0,
+      createdAt: p.createdAt || new Date().toISOString(),
+    };
+    setProducts(prev => [...prev, newProduct]);
     return newProduct;
   };
 
   const updateProduct = async (id, data) => {
-    try {
-      const payload = {
-        name: data.name,
-        description: data.description,
-        basePrice: data.price,
-        imageUrl: data.imageUrl,
-        category: { id: data.categoryId }
-      };
-      await api.put(`/product/${id}`, payload);
-    } catch(err) {}
-    persistProducts(products.map((p) => p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p));
+    const payload = {
+      name: data.name,
+      description: data.description || '',
+      basePrice: data.price,
+      imageUrl: data.imageUrl || '',
+      stockQuantity: data.stockQuantity,
+      categoryId: parseInt(data.categoryId),
+    };
+    await api.put(`/product/${id}`, payload);
+    setProducts(prev => prev.map(p =>
+      p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p
+    ));
   };
 
   const deleteProduct = async (id) => {
-    try { await api.delete(`/product/${id}`); } catch(err) {}
-    persistProducts(products.filter((p) => p.id !== id));
-    persistVariants(variants.filter((v) => v.productId !== id));
+    await api.delete(`/product/${id}`);
+    setProducts(prev => prev.filter(p => p.id !== id));
+    setVariants(prev => prev.filter(v => v.productId !== id));
   };
-  const getProduct = (id) => products.find((p) => p.id === parseInt(id));
+
+  const getProduct = (id) => products.find(p => p.id === parseInt(id));
 
   // ---- Variant CRUD ----
-  const getVariantsByProduct = (productId) => variants.filter((v) => v.productId === parseInt(productId));
+  const getVariantsByProduct = (productId) => variants.filter(v => v.productId === parseInt(productId));
+
   const addVariant = async (data) => {
-    try {
-      // Backend chỉ cần: { sizeName, colorName, price, stock, variantImageUrl }
-      const payload = {
-        sizeName: data.sizeName,
-        colorName: data.colorName,
-        price: data.price,
-        stock: data.stock,
-        variantImageUrl: data.variantImageUrl || '',
-      };
-      const res = await api.post('/product-variant', payload);
-      if (res.data?.data) {
-        // Gán productId nội bộ để UI vẫn filter được
-        const newV = { ...res.data.data, productId: data.productId };
-        persistVariants([...variants, newV]);
-        return newV;
-      }
-    } catch(err) { console.warn('API addVariant fail:', err); }
-    // Fallback
-    const newVariant = { ...data, id: Date.now() };
-    persistVariants([...variants, newVariant]);
-    return newVariant;
+    const payload = {
+      sizeName: data.sizeName,
+      colorName: data.colorName,
+      price: data.price,
+      stock: data.stock,
+      variantImageUrl: data.variantImageUrl || '',
+      productId: data.productId, // Link to product (flat ID)
+      product: { id: data.productId } // Send both forms just to be safe with this backend
+    };
+    const res = await api.post('/product-variant', payload);
+    if (!res.data?.data) throw new Error('Không thể tạo phân loại');
+    const newV = { ...res.data.data, productId: data.productId };
+    setVariants(prev => [...prev, newV]);
+    return newV;
   };
+
   const updateVariant = async (id, data) => {
-    try {
-      // Backend chỉ cần: { sizeName, colorName, price, stock, variantImageUrl }
-      const payload = {
-        sizeName: data.sizeName,
-        colorName: data.colorName,
-        price: data.price,
-        stock: data.stock,
-        variantImageUrl: data.variantImageUrl || '',
-      };
-      await api.put(`/product-variant/${id}`, payload);
-    } catch(err) { console.warn('API updateVariant fail:', err); }
-    persistVariants(variants.map((v) => v.id === id ? { ...v, ...data } : v));
+    const payload = {
+      sizeName: data.sizeName,
+      colorName: data.colorName,
+      price: data.price,
+      stock: data.stock,
+      variantImageUrl: data.variantImageUrl || '',
+      productId: data.productId, 
+      product: { id: data.productId }
+    };
+    await api.put(`/product-variant/${id}`, payload);
+    setVariants(prev => prev.map(v => v.id === id ? { ...v, ...data } : v));
   };
+
   const deleteVariant = async (id) => {
-    try { await api.delete(`/product-variant/${id}`); } catch(err) { console.warn('API deleteVariant fail:', err); }
-    persistVariants(variants.filter((v) => v.id !== id));
+    await api.delete(`/product-variant/${id}`);
+    setVariants(prev => prev.filter(v => v.id !== id));
   };
-  const getVariant = (id) => variants.find((v) => v.id === id);
+
+  const getVariant = (id) => variants.find(v => v.id === id);
 
   // ---- Orders ----
-  // POST /order → lấy orderId → POST /order-detail cho từng item
   const placeOrder = async ({ userId, deliveryAddress, items, totalAmount, discountApplied }) => {
     try {
       const orderDate = new Date().toISOString();
-      // Bước 1: Tạo đơn hàng
       const orderRes = await api.post('/order', {
-        orderDate,
-        deliveryAddress,
-        totalAmount,
-        discountApplied,
+        userId,
+        orderDate, 
+        deliveryAddress, 
+        totalAmount, 
+        discountApplied 
+      });
+      if (!orderRes.data?.data) throw new Error(orderRes.data?.message || 'Không thể tạo đơn hàng');
+
+      const createdOrder = orderRes.data.data;
+      const orderId = createdOrder.id;
+
+      try {
+        await Promise.all(
+          items.map(item => api.post('/order-detail', {
+            order: { id: orderId },
+            product: { id: item.productId },
+            ...(item.variantId ? { variant: { id: item.variantId } } : {}),
+            quantity: item.quantity,
+            unitPrice: item.unitPrice || item.price,
+          }))
+        );
+      } catch (err) {
+        // Log the actual error to help debugging
+        console.error('Failed to create order detail:', err.response?.data || err.message);
+        
+        try { await api.delete(`/order/${orderId}`); } catch(e) {} // Rollback order
+        
+        const backendMsg = err.response?.data?.message;
+        throw new Error(backendMsg || 'Lỗi khi tạo chi tiết đơn hàng. Vui lòng kiểm tra lại sản phẩm.');
+      }
+
+      const newOrder = { ...createdOrder, userId, status: createdOrder.status || 0, items };
+      setOrders(prev => [...prev, newOrder]);
+      return newOrder;
+    } catch (err) {
+      throw new Error(err?.response?.data?.message || err.message || 'Lỗi đặt hàng');
+    }
+  };
+
+  const updateOrderStatus = async (orderId, status) => {
+    try {
+      // Gọi API GET lấy order từ DB thật
+      const getRes = await api.get(`/order/${orderId}`);
+      if (!getRes.data?.data) throw new Error('Không tìm thấy đơn hàng trên server');
+      const order = getRes.data.data;
+      
+      let statusEnum = 0; // DANG_DAT
+      if (status === 1) statusEnum = 1;
+      if (status === 2) statusEnum = 2;
+
+      await api.put(`/order/${orderId}`, {
+        userId: order.userId,
+        orderDate: order.orderDate,
+        deliveryAddress: order.deliveryAddress,
+        totalAmount: order.totalAmount,
+        discountApplied: order.discountApplied,
+        status: statusEnum
       });
 
-      if (orderRes.data?.data) {
-        const createdOrder = orderRes.data.data;
-        const orderId = createdOrder.id;
-
-        // Bước 2: Tạo chi tiết đơn hàng cho từng item
-        const detailResults = await Promise.allSettled(
-          items.map((item) => {
-            // POST /order-detail
-            // Backend cần: { product: {id}, variant: {id} hoặc null, quantity, unitPrice }
-            // Ta thêm order: {id} để liên kết (JWT backend sử dụng session hoặc query param)
-            const detailPayload = {
-              order: { id: orderId },
-              product: { id: item.productId },
-              ...(item.variantId ? { variant: { id: item.variantId } } : {}),
-              quantity: item.quantity,
-              unitPrice: item.unitPrice || item.price,
-            };
-            return api.post('/order-detail', detailPayload);
-          })
-        );
-
-        // Lưu items nội bộ bất kể API thành công hay không
-        const newO = {
-          ...createdOrder,
-          userId,
-          status: createdOrder.status || 'DANG_DAT',
-          items,
-        };
-        persistOrders([...orders, newO]);
-        return newO;
-      }
-    } catch(err) {
-      console.warn('API placeOrder fail:', err);
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    } catch (err) {
+      throw new Error(err.response?.data?.message || err.message || 'Lỗi cập nhật trạng thái đơn hàng');
     }
-    // Fallback nội bộ
-    const newOrder = {
-      id: Date.now(),
-      userId,
-      orderDate: new Date().toISOString(),
-      deliveryAddress,
-      totalAmount,
-      discountApplied,
-      status: 'DANG_DAT',
-      items,
-    };
-    persistOrders([...orders, newOrder]);
-    return newOrder;
   };
 
-  // PUT /order/{id}: { orderDate, deliveryAddress, totalAmount, discountApplied }
-  const updateOrderStatus = async (orderId, status) => {
-    const order = orders.find((o) => o.id === orderId);
-    try {
-      if (order) {
-        await api.put(`/order/${orderId}`, {
-          orderDate: order.orderDate || new Date().toISOString(),
-          deliveryAddress: order.deliveryAddress || '',
-          totalAmount: order.totalAmount || 0,
-          discountApplied: order.discountApplied || 0,
-        });
-      }
-    } catch(err) {
-      console.warn('API updateOrder fail:', err);
-    }
-    persistOrders(orders.map((o) => o.id === orderId ? { ...o, status } : o));
-  };
-
-  // GET /order: lấy danh sách đơn hàng kèm items từ /order-detail
   const getUserOrders = async (userId) => {
-    try {
-      const res = await api.get('/order');
-      if (res.data?.data) {
-        // Fetch ORDER-DETAIL riêng để gắn items vào mỗi order
-        let detailMap = {};
-        try {
-          const detailRes = await api.get('/order-detail');
-          if (detailRes.data?.data) {
-            // NHÓM order-details theo orderId (nếu có liên kết)
-            detailRes.data.data.forEach(d => {
-              const oid = d.orderId || d.order?.id;
-              if (oid) {
-                if (!detailMap[oid]) detailMap[oid] = [];
-                // Map sang format nội bộ
-                detailMap[oid].push({
-                  id: d.id,
-                  productId: d.product?.id,
-                  variantId: d.variant?.id || null,
-                  productName: d.product?.name,
-                  sizeName: d.variant?.sizeName || null,
-                  colorName: d.variant?.colorName || null,
-                  quantity: d.quantity,
-                  unitPrice: d.unitPrice,
-                  imageUrl: d.variant?.variantImageUrl || d.product?.imageUrl,
-                });
-              }
-            });
-          }
-        } catch(e) {
-          console.warn('Could not fetch order-details:', e);
-        }
+    const res = await api.get('/order');
+    if (!res.data?.data) return [];
 
-        const apiOrders = res.data.data.map(o => ({
-          id: o.id,
-          userId,
-          orderDate: o.orderDate,
-          deliveryAddress: o.deliveryAddress,
-          totalAmount: o.totalAmount,
-          discountApplied: o.discountApplied,
-          status: o.status || 'DANG_DAT',
-          // Dùng items từ API nếu có, fallback về mảng rỗng
-          items: detailMap[o.id] || [],
-        }));
-        persistOrders(apiOrders);
-        return apiOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
+    const apiOrders = await Promise.all(res.data.data.map(async (o) => {
+      let items = [];
+      try {
+        // Sử dụng API mới để lấy chi tiết cho từng đơn hàng thay vì lấy toàn bộ
+        const detailRes = await api.get(`/order-detail/get-by-orderid?uid=${o.id}`);
+        if (detailRes.data?.data) {
+          items = detailRes.data.data.map(d => ({
+            id: d.id,
+            productId: d.product?.id,
+            variantId: d.variant?.id || null,
+            productName: d.product?.name,
+            sizeName: d.variant?.sizeName || null,
+            colorName: d.variant?.colorName || null,
+            quantity: d.quantity,
+            unitPrice: d.unitPrice,
+            imageUrl: d.variant?.variantImageUrl || d.product?.imageUrl,
+          }));
+        }
+      } catch (e) {
+        console.warn(`Could not fetch details for order ${o.id}:`, e);
       }
-    } catch(err) {
-      console.warn('API getUserOrders fail, dùng local:', err);
-    }
-    // Fallback từ localStorage
-    return orders
-      .filter((o) => o.userId === userId)
-      .sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
+
+      return {
+        id: o.id,
+        userId: o.userId, // Có thể lọc theo user ở Frontend nếu API chưa lọc
+        orderDate: o.orderDate,
+        deliveryAddress: o.deliveryAddress,
+        totalAmount: o.totalAmount,
+        discountApplied: o.discountApplied,
+        status: o.status || 0,
+        items,
+      };
+    }));
+
+    // Lọc đơn hàng của user hiện tại nếu cần
+    const userOrders = apiOrders.filter(o => o.userId === userId || !o.userId); 
+    // ^ Tùy logic DB, nếu API /order đã lọc theo User rồi thì bỏ dòng filter này.
+
+    setOrders(userOrders);
+    return userOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
   };
 
   return (
     <ShopContext.Provider value={{
-      // data
-      products, categories, variants, orders,
-      // category
+      products, categories, variants, orders, loadingShop,
       addCategory, updateCategory, deleteCategory, getCategoryName,
-      // product
       addProduct, updateProduct, deleteProduct, getProduct,
-      // variant
       getVariantsByProduct, addVariant, updateVariant, deleteVariant, getVariant,
-      // orders
       placeOrder, updateOrderStatus, getUserOrders,
     }}>
       {children}

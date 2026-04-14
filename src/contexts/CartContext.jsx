@@ -93,9 +93,9 @@ export const CartProvider = ({ children }) => {
     // API Push
     try {
       const payload = {
-        product: { id: product.id },
-        ...(variantId ? { variant: { id: variantId } } : {}),
-        quantity
+        productId: product.id,
+        variantId: variantId || null,
+        quantity: quantity
       };
       await api.post('/cart-item', payload);
     } catch(err) { console.warn('API Add Cart fail:', err); }
@@ -120,11 +120,11 @@ export const CartProvider = ({ children }) => {
 
     if (itemToUpdate) {
       try {
-        // PUT backend require schema: product, variant, quantity
+        // PUT backend require schema: productId, variantId, quantity
         const payload = {
-          product: { id: itemToUpdate.productId },
-          ...(itemToUpdate.variantId ? { variant: { id: itemToUpdate.variantId } } : {}),
-          quantity
+          productId: itemToUpdate.productId,
+          variantId: itemToUpdate.variantId || null,
+          quantity: quantity
         };
         await api.put(`/cart-item/${itemToUpdate.id}`, payload);
       } catch(err) { console.warn('API Update Cart fail:', err); }

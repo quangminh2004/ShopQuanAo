@@ -29,13 +29,13 @@ export const formatDateOnly = (dateStr) => {
 };
 
 export const ORDER_STATUS_LABEL = {
-  DANG_DAT: 'Đang đặt',
-  DA_NHAN: 'Đã nhận',
-  DA_HUY: 'Đã hủy',
+  0: 'Đang đặt',
+  1: 'Đã nhận',
+  2: 'Đã hủy',
 };
 
 export const ORDER_STATUS_COLOR = {
-  DANG_DAT: '#f9a825',
-  DA_NHAN: '#2e7d32',
-  DA_HUY: '#c62828',
+  0: '#f9a825',
+  1: '#2e7d32',
+  2: '#c62828',
 };

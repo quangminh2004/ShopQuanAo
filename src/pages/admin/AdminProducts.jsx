@@ -68,19 +68,32 @@ const AdminProducts = () => {
   };
 
   const uploadImage = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
+    // Thử field 'image' trước
+    const tryUpload = async (fieldName) => {
+      const formData = new FormData();
+      formData.append(fieldName, file);
       const res = await api.post('/upload/image', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      if (res.data?.success && res.data?.data) {
-        return res.data.data;
+      // Hỗ trợ nhiều cấu trúc response
+      if (res.data?.success && res.data?.data) return res.data.data;
+      if (typeof res.data === 'string' && res.data.startsWith('http')) return res.data;
+      if (res.data?.url) return res.data.url;
+      if (res.data?.imageUrl) return res.data.imageUrl;
+      throw new Error('Không nhận được URL ảnh từ server');
+    };
+
+    try {
+      return await tryUpload('image');
+    } catch (err1) {
+      console.warn('Upload với field "image" thất bại, thử "file"...', err1);
+      try {
+        return await tryUpload('file');
+      } catch (err2) {
+        console.warn('Upload với field "file" cũng thất bại:', err2);
+        throw new Error('Lỗi upload ảnh! Server trả lỗi 500. Hãy dùng URL ảnh trực tiếp.');
       }
-    } catch (err) {
-      console.warn('API Upload error:', err);
     }
-    throw new Error('Lỗi upload ảnh!');
   };
 
   const handleSave = async () => {
@@ -102,33 +115,51 @@ const AdminProducts = () => {
       setUploading(false);
     }
 
+    // Validation: Total stock cannot be less than the SUM of all variants' stock
     if (editingId) {
-      updateProduct(editingId, {
-        ...form,
-        imageUrl: finalImageUrl,
-        price: parseFloat(form.price),
-        stockQuantity: parseInt(form.stockQuantity),
-        categoryId: parseInt(form.categoryId),
-      });
-      toast.success('Cập nhật sản phẩm thành công!');
-    } else {
-      addProduct({
-        ...form,
-        imageUrl: finalImageUrl,
-        price: parseFloat(form.price),
-        stockQuantity: parseInt(form.stockQuantity),
-        categoryId: parseInt(form.categoryId),
-        sold: 0,
-      });
-      toast.success('Thêm sản phẩm thành công!');
+      const existingVariants = getVariantsByProduct(editingId);
+      const variantsTotalStock = existingVariants.reduce((sum, v) => sum + v.stock, 0);
+      if (variantsTotalStock > parseInt(form.stockQuantity)) {
+        toast.error(`Tổng tồn kho (${form.stockQuantity}) không được nhỏ hơn tổng số lượng của các phân loại (${variantsTotalStock})! Vui lòng tăng tổng tồn kho hoặc giảm tồn kho của các phân loại.`);
+        return;
+      }
     }
-    setModalOpen(false);
+
+    try {
+      if (editingId) {
+        await updateProduct(editingId, {
+          ...form,
+          imageUrl: finalImageUrl,
+          price: parseFloat(form.price),
+          stockQuantity: parseInt(form.stockQuantity),
+          categoryId: parseInt(form.categoryId),
+        });
+        toast.success('Cập nhật sản phẩm thành công!');
+      } else {
+        await addProduct({
+          ...form,
+          imageUrl: finalImageUrl,
+          price: parseFloat(form.price),
+          stockQuantity: parseInt(form.stockQuantity),
+          categoryId: parseInt(form.categoryId),
+          sold: 0,
+        });
+        toast.success('Thêm sản phẩm thành công!');
+      }
+      setModalOpen(false);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi lưu sản phẩm! Kiểm tra kết nối server.');
+    }
   };
 
-  const handleDelete = (id) => {
-    deleteProduct(id);
-    setDeleteConfirm(null);
-    toast.success('Đã xóa sản phẩm!');
+  const handleDelete = async (id) => {
+    try {
+      await deleteProduct(id);
+      setDeleteConfirm(null);
+      toast.success('Đã xóa sản phẩm!');
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Lỗi xóa sản phẩm!');
+    }
   };
 
   // ---- Variants Logic ----
@@ -148,6 +179,18 @@ const AdminProducts = () => {
     }
     if (!variantForm.price || !variantForm.stock) {
       toast.error('Cần nhập giá và tồn kho riêng cho phân loại này!'); return;
+    }
+
+    const parentProduct = products.find(p => p.id === activeProductId);
+    if (parentProduct) {
+      // Tính tổng tồn kho của các phân loại khác + phân loại đang chỉnh sửa này
+      const otherVariants = activeVariants.filter(v => v.id !== editingVariantId);
+      const totalStockWithNew = otherVariants.reduce((sum, v) => sum + v.stock, 0) + parseInt(variantForm.stock);
+
+      if (totalStockWithNew > parentProduct.stockQuantity) {
+        toast.error(`Tổng tồn kho các phân loại (${totalStockWithNew}) không được vượt quá số lượng tổng của sản phẩm (${parentProduct.stockQuantity})!`);
+        return;
+      }
     }
 
     let finalImageUrl = variantForm.variantImageUrl;
@@ -170,15 +213,18 @@ const AdminProducts = () => {
       price: parseFloat(variantForm.price),
       stock: parseInt(variantForm.stock),
     };
-    if (editingVariantId) {
-      updateVariant(editingVariantId, data);
-      setEditingVariantId(null);
-      toast.success('Đã cập nhật phân loại!');
-    } else {
-      addVariant(data);
-      toast.success('Đã thêm phân loại!');
+    try {
+      await (editingVariantId ? updateVariant(editingVariantId, data) : addVariant(data));
+      if (editingVariantId) {
+        setEditingVariantId(null);
+        toast.success('Đã cập nhật phân loại!');
+      } else {
+        toast.success('Đã thêm phân loại!');
+      }
+      setVariantForm(EMPTY_VARIANT_FORM);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Lỗi lưu phân loại!');
     }
-    setVariantForm(EMPTY_VARIANT_FORM);
   };
 
   const startEditVariant = (v) => {

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { FiGrid, FiPackage, FiUsers, FiBarChart2, FiLogOut, FiShoppingBag } from 'react-icons/fi';
+import { FiGrid, FiPackage, FiUsers, FiBarChart2, FiLogOut, FiShoppingBag, FiTag } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
 
 const AdminLayout = ({ children }) => {
@@ -13,6 +13,7 @@ const AdminLayout = ({ children }) => {
 
   const navItems = [
     { to: '/admin', icon: <FiGrid />, label: 'Dashboard', exact: true },
+    { to: '/admin/categories', icon: <FiTag />, label: 'Danh mục' },
     { to: '/admin/products', icon: <FiShoppingBag />, label: 'Sản phẩm' },
     { to: '/admin/orders', icon: <FiPackage />, label: 'Đơn hàng' },
     { to: '/admin/customers', icon: <FiUsers />, label: 'Khách hàng' },

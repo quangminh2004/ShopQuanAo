@@ -360,7 +360,7 @@ export const INITIAL_ORDERS = [
     deliveryAddress: '45 Nguyễn Huệ, Quận 1, TP.HCM',
     totalAmount: 775600,
     discountApplied: 0,
-    status: 'DA_NHAN',
+    status: 1,
     items: [
       { productId: 1, variantId: 102, productName: 'Áo Thun Basic Unisex', sizeName: 'M', colorName: 'Trắng', quantity: 2, unitPrice: 199000, imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop' },
       { productId: 3, variantId: 302, productName: 'Quần Jeans Slim Fit', sizeName: '30', colorName: 'Xanh Đậm', quantity: 1, unitPrice: 459000, imageUrl: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=400&fit=crop' },
@@ -373,7 +373,7 @@ export const INITIAL_ORDERS = [
     deliveryAddress: '45 Nguyễn Huệ, Quận 1, TP.HCM',
     totalAmount: 2424000,
     discountApplied: 0,
-    status: 'DANG_DAT',
+    status: 0,
     items: [
       { productId: 12, variantId: 1201, productName: 'Hoodie Nỉ Oversize', sizeName: 'M', colorName: 'Xám', quantity: 2, unitPrice: 489000, imageUrl: 'https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400&h=400&fit=crop' },
       { productId: 11, variantId: null, productName: 'Đầm Công Sở Thanh Lịch', sizeName: 'M', colorName: 'Đen', quantity: 1, unitPrice: 599000, imageUrl: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=400&h=400&fit=crop' },
@@ -386,7 +386,7 @@ export const INITIAL_ORDERS = [
     deliveryAddress: '78 Hai Bà Trưng, Quận 3, TP.HCM',
     totalAmount: 4228750,
     discountApplied: 253750,
-    status: 'DA_NHAN',
+    status: 1,
     items: [
       { productId: 5, variantId: 502, productName: 'Áo Khoác Bomber Nhẹ', sizeName: 'M', colorName: 'Đen', quantity: 3, unitPrice: 520000, imageUrl: 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=400&fit=crop' },
       { productId: 7, variantId: null, productName: 'Áo Sơ Mi Linen Trắng', sizeName: 'L', colorName: 'Trắng', quantity: 2, unitPrice: 419000, imageUrl: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=400&h=400&fit=crop' },
@@ -399,7 +399,7 @@ export const INITIAL_ORDERS = [
     deliveryAddress: '78 Hai Bà Trưng, Quận 3, TP.HCM',
     totalAmount: 6175000,
     discountApplied: 375000,
-    status: 'DA_NHAN',
+    status: 1,
     items: [
       { productId: 11, variantId: null, productName: 'Đầm Công Sở Thanh Lịch', sizeName: 'M', colorName: 'Đen', quantity: 5, unitPrice: 599000, imageUrl: 'https://images.unsplash.com/photo-1539109136881-3be0616acf4b?w=400&h=400&fit=crop' },
     ],
@@ -411,7 +411,7 @@ export const INITIAL_ORDERS = [
     deliveryAddress: '12 Võ Thị Sáu, Quận Bình Thạnh, TP.HCM',
     totalAmount: 42500000,
     discountApplied: 7500000,
-    status: 'DA_NHAN',
+    status: 1,
     items: [
       { productId: 17, variantId: 1702, productName: 'Áo Thun In Logo LUNINA', sizeName: 'M', colorName: 'Trắng', quantity: 50, unitPrice: 249000, imageUrl: 'https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400&h=400&fit=crop' },
       { productId: 16, variantId: null, productName: 'Quần Jogger Thể Thao', sizeName: 'L', colorName: 'Xám', quantity: 50, unitPrice: 299000, imageUrl: 'https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=400&h=400&fit=crop' },
@@ -424,7 +424,7 @@ export const INITIAL_ORDERS = [
     deliveryAddress: '12 Võ Thị Sáu, Quận Bình Thạnh, TP.HCM',
     totalAmount: 10200000,
     discountApplied: 1800000,
-    status: 'DANG_DAT',
+    status: 0,
     items: [
       { productId: 5, variantId: 503, productName: 'Áo Khoác Bomber Nhẹ', sizeName: 'L', colorName: 'Xanh Rêu', quantity: 10, unitPrice: 530000, imageUrl: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=400&h=400&fit=crop' },
     ],

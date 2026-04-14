@@ -92,7 +92,7 @@ const Profile = () => {
                   { label: '💰 Tổng chi tiêu', value: formatCurrency(currentUser.totalSpending), highlight: true },
                   { label: '⭐ Điểm tích lũy', value: `${currentUser.points?.toLocaleString() || 0} điểm` },
                   { label: '📦 Tổng đơn hàng', value: loadingOrders ? '⏳...' : `${orders.length} đơn` },
-                  { label: '✅ Đã hoàn thành', value: loadingOrders ? '⏳...' : `${orders.filter((o) => o.status === 'DA_NHAN').length} đơn` },
+                  { label: '✅ Đã hoàn thành', value: loadingOrders ? '⏳...' : `${orders.filter((o) => o.status === 1).length} đơn` },
                 ].map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', background: 'var(--bg)', borderRadius: 'var(--radius-md)' }}>
                     <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{item.label}</span>

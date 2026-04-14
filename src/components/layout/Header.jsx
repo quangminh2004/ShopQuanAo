@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiShoppingCart, FiUser, FiChevronDown, FiLogOut, FiPackage, FiSettings } from 'react-icons/fi';
 import { HiOutlineShoppingBag } from 'react-icons/hi';
@@ -13,6 +13,18 @@ const Header = () => {
   const navigate = useNavigate();
   const [cartOpen, setCartOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Đóng dropdown khi click ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -49,11 +61,10 @@ const Header = () => {
                     )}
                   </button>
 
-                  {/* User Dropdown */}
-                  <div className="user-dropdown" onMouseLeave={() => setDropdownOpen(false)}>
+                  {/* User Dropdown - Click to open, click outside to close */}
+                  <div className="user-dropdown" ref={dropdownRef}>
                     <button
                       className="user-btn"
-                      onMouseEnter={() => setDropdownOpen(true)}
                       onClick={() => setDropdownOpen(!dropdownOpen)}
                     >
                       <div className="avatar">

@@ -38,7 +38,7 @@ const AdminCustomers = () => {
             totalSpending: u.totalSpending || 0,
             points: u.points || 0,
             rank: u.rank || 'NORMAL',
-            role: u.role || 'USER',
+            role: u.role || 'CUSTOMER',
             username: u.email, // Dùng email làm username hiển thị
           }));
           setApiUsers(mapped);
@@ -63,7 +63,7 @@ const AdminCustomers = () => {
     }
   };
 
-  const customers = users.filter((u) => u.role === 'USER');
+  const customers = users.filter((u) => u.role === 'CUSTOMER');
 
   const filtered = customers.filter((u) => {
     const matchSearch = !search.trim() ||

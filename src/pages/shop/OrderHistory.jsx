@@ -9,9 +9,9 @@ import { toast } from 'react-toastify';
 
 const TABS = [
   { key: 'all', label: 'Tất cả' },
-  { key: 'DANG_DAT', label: '⏳ Đang đặt' },
-  { key: 'DA_NHAN', label: '✅ Đã nhận' },
-  { key: 'DA_HUY', label: '❌ Đã hủy' },
+  { key: 0, label: '⏳ Đang đặt' },
+  { key: 1, label: '✅ Đã nhận' },
+  { key: 2, label: '❌ Đã hủy' },
 ];
 
 const OrderHistory = () => {
@@ -36,18 +36,26 @@ const OrderHistory = () => {
   const filtered = tab === 'all' ? allOrders : allOrders.filter((o) => o.status === tab);
 
   const handleReceive = async (orderId) => {
-    await updateOrderStatus(orderId, 'DA_NHAN');
-    toast.success('Đã xác nhận nhận hàng!');
-    // Reload lại danh sách
-    const result = await getUserOrders(currentUser.id);
-    setAllOrders(result);
+    try {
+      await updateOrderStatus(orderId, 1);
+      toast.success('Đã xác nhận nhận hàng!');
+      // Reload lại danh sách
+      const result = await getUserOrders(currentUser.id);
+      setAllOrders(result);
+    } catch (err) {
+      toast.error(err.message || 'Lỗi nhận hàng');
+    }
   };
 
   const handleCancel = async (orderId) => {
-    await updateOrderStatus(orderId, 'DA_HUY');
-    toast.info('Đã hủy đơn hàng.');
-    const result = await getUserOrders(currentUser.id);
-    setAllOrders(result);
+    try {
+      await updateOrderStatus(orderId, 2);
+      toast.info('Đã hủy đơn hàng.');
+      const result = await getUserOrders(currentUser.id);
+      setAllOrders(result);
+    } catch (err) {
+      toast.error(err.message || 'Lỗi hủy đơn');
+    }
   };
 
   return (
@@ -157,7 +165,7 @@ const OrderHistory = () => {
                     </div>
 
                     {/* Actions */}
-                    {order.status === 'DANG_DAT' && (
+                    {order.status === 0 && (
                       <div style={{ display: 'flex', gap: '10px' }}>
                         <button className="btn btn-success btn-sm" onClick={() => handleReceive(order.id)}>
                           ✅ Xác nhận đã nhận

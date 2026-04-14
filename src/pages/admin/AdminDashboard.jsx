@@ -14,12 +14,12 @@ const AdminDashboard = () => {
   const { users } = useAuth();
 
   const totalRevenue = orders
-    .filter((o) => o.status === 'DA_NHAN')
+    .filter((o) => o.status === 1)
     .reduce((s, o) => s + o.totalAmount, 0);
 
   const totalOrders = orders.length;
-  const completedOrders = orders.filter((o) => o.status === 'DA_NHAN').length;
-  const pendingOrders = orders.filter((o) => o.status === 'DANG_DAT').length;
+  const completedOrders = orders.filter((o) => o.status === 1).length;
+  const pendingOrders = orders.filter((o) => o.status === 0).length;
   const totalCustomers = users.filter((u) => u.role === 'USER').length;
 
   // Monthly revenue (last 6 months)
@@ -37,7 +37,7 @@ const AdminDashboard = () => {
       };
     });
 
-    orders.filter((o) => o.status === 'DA_NHAN').forEach((o) => {
+    orders.filter((o) => o.status === 1).forEach((o) => {
       const d = new Date(o.orderDate);
       const found = months.find((m) => m.mIndex === d.getMonth() && m.yIndex === d.getFullYear());
       if (found) { found.revenue += o.totalAmount; found.orders += 1; }
@@ -157,8 +157,8 @@ const AdminDashboard = () => {
               <tbody>
                 {[...orders].sort((a,b) => new Date(b.orderDate) - new Date(a.orderDate)).slice(0,8).map((order) => {
                   const user = users.find((u) => u.id === order.userId);
-                  const colors = { DANG_DAT: '#f9a825', DA_NHAN: '#2e7d32', DA_HUY: '#c62828' };
-                  const labels = { DANG_DAT: 'Đang đặt', DA_NHAN: 'Đã nhận', DA_HUY: 'Đã hủy' };
+                  const colors = { 0: '#f9a825', 1: '#2e7d32', 2: '#c62828' };
+                  const labels = { 0: 'Đang đặt', 1: 'Đã nhận', 2: 'Đã hủy' };
                   return (
                     <tr key={order.id}>
                       <td style={{ fontWeight: 700, fontSize: '13px' }}>#{String(order.id).padStart(6,'0')}</td>

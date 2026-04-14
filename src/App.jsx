@@ -24,6 +24,7 @@ import Profile from './pages/user/Profile';
 // Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminProducts from './pages/admin/AdminProducts';
+import AdminCategories from './pages/admin/AdminCategories';
 import AdminOrders from './pages/admin/AdminOrders';
 import AdminCustomers from './pages/admin/AdminCustomers';
 
@@ -60,6 +61,9 @@ function App() {
               } />
               <Route path="/admin/products" element={
                 <ProtectedRoute requiredRole="ADMIN"><AdminProducts /></ProtectedRoute>
+              } />
+              <Route path="/admin/categories" element={
+                <ProtectedRoute requiredRole="ADMIN"><AdminCategories /></ProtectedRoute>
               } />
               <Route path="/admin/orders" element={
                 <ProtectedRoute requiredRole="ADMIN"><AdminOrders /></ProtectedRoute>

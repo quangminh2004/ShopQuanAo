@@ -1,121 +1,80 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { INITIAL_USERS } from '../data/mockData';
 import api from '../utils/api';
 import { getRankFromSpending } from '../utils/rankUtils';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [users, setUsers] = useState(() => {
-    const stored = localStorage.getItem('lunina_users');
-    if (stored) return JSON.parse(stored);
-    localStorage.setItem('lunina_users', JSON.stringify(INITIAL_USERS));
-    return INITIAL_USERS;
-  });
-
+  // Chỉ dùng localStorage để lưu thông tin THẬT của người dùng ĐÃ ĐĂNG NHẬP (session)
   const [currentUser, setCurrentUser] = useState(() => {
     const stored = localStorage.getItem('lunina_current_user');
     return stored ? JSON.parse(stored) : null;
   });
 
-  const persistUsers = (updatedUsers) => {
-    localStorage.setItem('lunina_users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-  };
+  // Xóa toàn bộ localStorage cũ rác của mockData lúc khởi động (chỉ dọn mảng users, giữ lại current_user)
+  useEffect(() => {
+    localStorage.removeItem('lunina_users');
+  }, []);
 
-  // email = trường người dùng nhập (login bằng email theo backend schema)
+  // Đăng nhập API
   const login = async (email, password) => {
     try {
-      // Backend nhận: { email, password }
       const response = await api.post('/user/login', { email, password });
-      
+
       if (!response.data || response.data.success === false) {
         return { success: false, message: response.data?.message || 'Email hoặc mật khẩu không chính xác' };
       }
-      
-      let user = response.data.data;
-      if (!user) throw new Error('Không nhận được dữ liệu user');
 
-      // Map sang internal user object (backend không có field rank, ta tính từ totalSpending)
+      const user = response.data.data;
+      if (!user) throw new Error('Không nhận được dữ liệu user từ server');
+
       const updated = {
         ...user,
         rank: getRankFromSpending(user.totalSpending || 0),
-        // Dùng email làm "username" hiển thị nếu không có fullName
         username: user.email,
       };
+      
       localStorage.setItem('lunina_current_user', JSON.stringify(updated));
       setCurrentUser(updated);
       return { success: true, user: updated };
     } catch (err) {
-      console.warn('API Login failed, trying mock fallback...', err);
-      // Fallback: tìm theo email hoặc username
-      const found = users.find(
-        (u) => (u.email === email || u.username === email) && u.password === password
-      );
-      if (!found) return { success: false, message: 'Email hoặc mật khẩu không đúng!' };
-
-      const updated = { ...found, rank: getRankFromSpending(found.totalSpending || 0) };
-      localStorage.setItem('lunina_current_user', JSON.stringify(updated));
-      setCurrentUser(updated);
-      return { success: true, user: updated };
+      // TRẢ VỀ LỖI THẬT, KHÔNG FALLBACK MOCK NỮA
+      const serverMsg = err.response?.data?.message || err.response?.data?.error;
+      return { success: false, message: serverMsg || 'Lỗi kết nối từ server khi đăng nhập!' };
     }
   };
 
+  // Đăng ký API
   const register = async ({ username, password, fullName, email }) => {
     try {
-      // Truyền password trong body, không truyền trên URL
+      // Schema hiện tại: fullName, email, address + password ở query param 
       const payload = {
         fullName,
         email,
-        password,          // password nằm trong body
-        role: 'USER',
         address: '',
-        totalSpending: 0,
-        points: 0,
-        rank: 'NORMAL',
       };
-      
-      const response = await api.post('/user/register', payload);
-      
+
+      const response = await api.post(`/user/register?password=${encodeURIComponent(password)}`, payload);
+
       if (!response.data || response.data.success === false) {
         return { success: false, message: response.data?.message || 'Đăng ký thất bại' };
       }
 
-      let newUser = response.data.data;
+      const newUser = response.data.data;
       const enriched = {
         ...newUser,
         rank: getRankFromSpending(newUser.totalSpending || 0),
-        username: newUser.email, // Dùng email làm username nội bộ
+        username: newUser.email,
       };
-       
+
       localStorage.setItem('lunina_current_user', JSON.stringify(enriched));
       setCurrentUser(enriched);
-      persistUsers([...users, enriched]);
-
       return { success: true, user: enriched };
-    } catch(err) {
-      console.warn('API Register failed, trying mock fallback...', err);
-      // Fallback mock
-      if (users.find((u) => u.email === email || u.username === username)) {
-        return { success: false, message: 'Email đã được sử dụng!' };
-      }
-      const newUser = {
-        id: Date.now(),
-        username,
-        password,
-        fullName,
-        email,
-        totalSpending: 0,
-        points: 0,
-        rank: 'NORMAL',
-        role: 'USER',
-        createdAt: new Date().toISOString(),
-      };
-      const updated = [...users, newUser];
-      persistUsers(updated);
-      localStorage.setItem('lunina_current_user', JSON.stringify(newUser));
-      setCurrentUser(newUser);
-      return { success: true, user: newUser };
+    } catch (err) {
+      // TRẢ VỀ LỖI THẬT TỪ BACKEND
+      console.warn("Register API Error:", err.response?.data);
+      const serverMsg = err.response?.data?.message || err.response?.data?.error || `HTTP ${err.response?.status}: Lấy lỗi từ API thất bại`;
+      return { success: false, message: serverMsg };
     }
   };
 
@@ -124,38 +83,17 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null);
   };
 
-  const updateUser = (updatedData) => {
-    const updated = users.map((u) =>
-      u.id === updatedData.id ? { ...u, ...updatedData } : u
-    );
-    persistUsers(updated);
-    const refreshed = updated.find((u) => u.id === updatedData.id);
-    localStorage.setItem('lunina_current_user', JSON.stringify(refreshed));
-    setCurrentUser(refreshed);
-  };
-
-  // Called after order is placed to update totalSpending & rank
-  const addSpending = (userId, amount) => {
-    const updated = users.map((u) => {
-      if (u.id === userId) {
-        const newTotal = (u.totalSpending || 0) + amount;
-        const newRank = getRankFromSpending(newTotal);
-        const newPoints = (u.points || 0) + Math.floor(amount / 1000);
-        return { ...u, totalSpending: newTotal, rank: newRank, points: newPoints };
-      }
-      return u;
-    });
-    persistUsers(updated);
-    if (currentUser?.id === userId) {
-      const refreshed = updated.find((u) => u.id === userId);
-      localStorage.setItem('lunina_current_user', JSON.stringify(refreshed));
-      setCurrentUser(refreshed);
-    }
-  };
-
   return (
     <AuthContext.Provider
-      value={{ currentUser, users, login, register, logout, updateUser, addSpending }}
+      value={{ 
+        currentUser, 
+        login, 
+        register, 
+        logout,
+        // Dùng fake rỗng cho các component đang cần mảng users cũ (ví dụ AdminCustomers)
+        // Trong tương lai AdminCustomers cần gọi API GET /api/user đàng hoàng
+        users: [] 
+      }}
     >
       {children}
     </AuthContext.Provider>

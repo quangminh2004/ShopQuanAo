@@ -7,7 +7,7 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import Modal from '../../components/common/Modal';
 import { toast } from 'react-toastify';
 
-const STATUS_OPTIONS = ['Tất cả', 'DANG_DAT', 'DA_NHAN', 'DA_HUY'];
+const STATUS_OPTIONS = ['Tất cả', 0, 1, 2];
 
 const AdminOrders = () => {
   const { getUserOrders, updateOrderStatus } = useShop();
@@ -70,9 +70,9 @@ const AdminOrders = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
           {[
             { key: 'Tất cả', label: 'Tất cả', color: '#1565c0', count: orders.length },
-            { key: 'DANG_DAT', label: 'Đang đặt', color: '#f9a825', count: orders.filter((o) => o.status === 'DANG_DAT').length },
-            { key: 'DA_NHAN', label: 'Đã nhận', color: '#2e7d32', count: orders.filter((o) => o.status === 'DA_NHAN').length },
-            { key: 'DA_HUY', label: 'Đã hủy', color: '#c62828', count: orders.filter((o) => o.status === 'DA_HUY').length },
+            { key: 0, label: 'Đang đặt', color: '#f9a825', count: orders.filter((o) => o.status === 0).length },
+            { key: 1, label: 'Đã nhận', color: '#2e7d32', count: orders.filter((o) => o.status === 1).length },
+            { key: 2, label: 'Đã hủy', color: '#c62828', count: orders.filter((o) => o.status === 2).length },
           ].map((s) => (
             <div
               key={s.key}
@@ -150,8 +150,8 @@ const AdminOrders = () => {
                           <button className="btn btn-ghost btn-sm btn-icon" title="Chi tiết" onClick={() => setDetailOrder(order)}>
                             <FiEye style={{ color: 'var(--info)' }} />
                           </button>
-                          {order.status === 'DANG_DAT' && (
-                            <button className="btn btn-success btn-sm" onClick={() => handleStatus(order.id, 'DA_NHAN')}>
+                          {order.status === 0 && (
+                            <button className="btn btn-success btn-sm" onClick={() => handleStatus(order.id, 1)}>
                               ✓ Nhận
                             </button>
                           )}
@@ -224,10 +224,10 @@ const AdminOrders = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '8px' }}>
-                {detailOrder.status === 'DANG_DAT' && (
+                {detailOrder.status === 0 && (
                   <>
-                    <button className="btn btn-success btn-sm" onClick={() => handleStatus(detailOrder.id, 'DA_NHAN')}>✅ Xác nhận nhận hàng</button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => handleStatus(detailOrder.id, 'DA_HUY')}>❌ Hủy đơn</button>
+                    <button className="btn btn-success btn-sm" onClick={() => handleStatus(detailOrder.id, 1)}>✅ Xác nhận nhận hàng</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => handleStatus(detailOrder.id, 2)}>❌ Hủy đơn</button>
                   </>
                 )}
                 <span style={{
