@@ -2,6 +2,36 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../utils/api';
 
 const ShopContext = createContext(null);
+const VARIANT_PRODUCT_MAP_KEY = 'lunina_variant_product_map';
+
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const mapVariant = (variant, productId = null) => ({
+  id: variant?.id,
+  productId: variant?.productId ?? variant?.product?.id ?? productId,
+  sizeName: variant?.sizeName || '',
+  colorName: variant?.colorName || '',
+  price: toNumber(variant?.price, 0),
+  stock: toNumber(variant?.stock, 0),
+  variantImageUrl: variant?.variantImageUrl || '',
+});
+
+const loadVariantProductMap = () => {
+  try {
+    const raw = localStorage.getItem(VARIANT_PRODUCT_MAP_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveVariantProductMap = (mapping) => {
+  localStorage.setItem(VARIANT_PRODUCT_MAP_KEY, JSON.stringify(mapping || {}));
+};
 
 export const ShopProvider = ({ children }) => {
   // Khởi tạo rỗng — dữ liệu thật luôn từ API
@@ -29,35 +59,46 @@ export const ShopProvider = ({ children }) => {
         const prodRes = await api.get('/product');
         const prodData = prodRes.data?.data;
         if (Array.isArray(prodData)) {
-          const mapped = prodData.map(p => ({
-            id: p.id,
-            name: p.name,
-            description: p.description || '',
-            price: p.basePrice || p.price || 0,
-            imageUrl: p.imageUrl || '',
-            categoryId: p.category?.id || null,
-            stockQuantity: p.stockQuantity ?? 0,
-            sold: p.sold ?? 0,
-            createdAt: p.createdAt || new Date().toISOString(),
-          }));
-          setProducts(mapped);
+          const variantRes = await api.get('/product-variant?page=1&size=1000');
+          const variantData = Array.isArray(variantRes.data?.data) ? variantRes.data.data : [];
+          const variantProductMap = loadVariantProductMap();
+          const allVariants = variantData
+            .map(v => {
+              const mappedProductId =
+                v?.productId ??
+                v?.product?.id ??
+                variantProductMap[String(v?.id)] ??
+                (prodData.length === 1 ? prodData[0]?.id : null);
+              return mapVariant(v, mappedProductId);
+            })
+            .filter(v => v.productId !== null && v.productId !== undefined);
 
-          // Extract variants từ products
-          const allVariants = [];
-          prodData.forEach(p => {
-            (p.variants || []).forEach(v => {
-              allVariants.push({
-                id: v.id,
-                productId: p.id,
-                sizeName: v.sizeName,
-                colorName: v.colorName,
-                price: v.price || 0,
-                stock: v.stock || 0,
-                variantImageUrl: v.variantImageUrl || '',
-              });
-            });
-          });
+          const nextMap = { ...variantProductMap };
+          allVariants.forEach(v => { nextMap[String(v.id)] = v.productId; });
+          saveVariantProductMap(nextMap);
           setVariants(allVariants);
+
+          const mapped = prodData.map(p => {
+            const stockFromProduct = p.stockQuantity;
+            const stockFromVariants = allVariants
+              .filter(v => String(v.productId) === String(p.id))
+              .reduce((sum, v) => sum + toNumber(v.stock, 0), 0);
+            const hasVariants = allVariants.some(v => String(v.productId) === String(p.id));
+
+            return {
+              id: p.id,
+              name: p.name,
+              description: p.description || '',
+              price: p.basePrice || p.price || 0,
+              imageUrl: p.imageUrl || '',
+              categoryId: p.category?.id || null,
+              // Luôn ưu tiên tổng stock của variants nếu sản phẩm có phân loại.
+              stockQuantity: hasVariants ? stockFromVariants : (stockFromProduct ?? 0),
+              sold: p.sold ?? 0,
+              createdAt: p.createdAt || new Date().toISOString(),
+            };
+          });
+          setProducts(mapped);
         }
       } catch (err) {
         console.warn('Failed to fetch products:', err);
@@ -140,17 +181,79 @@ export const ShopProvider = ({ children }) => {
   };
 
   const updateProduct = async (id, data) => {
+    const numericId = parseInt(id);
+    const normalizedStock = toNumber(data.stockQuantity, 0);
+    const normalizedPrice = toNumber(data.price, 0);
+    const existingProduct = products.find(p => String(p.id) === String(numericId));
+    const normalizedCategoryId = toNumber(
+      data.categoryId ?? existingProduct?.categoryId,
+      NaN
+    );
     const payload = {
       name: data.name,
       description: data.description || '',
-      basePrice: data.price,
+      basePrice: normalizedPrice,
       imageUrl: data.imageUrl || '',
-      stockQuantity: data.stockQuantity,
-      categoryId: parseInt(data.categoryId),
+      categoryId: normalizedCategoryId,
     };
-    await api.put(`/product/${id}`, payload);
+    if (!Number.isFinite(normalizedCategoryId)) {
+      throw new Error('Danh mục không hợp lệ, vui lòng chọn lại danh mục.');
+    }
+    try {
+      await api.put(`/product/${id}`, payload);
+    } catch (err) {
+      const backendMsg = err?.response?.data?.message || err?.message || '';
+      const isCategoryHibernateBug =
+        backendMsg.includes('identifier of an instance of') &&
+        backendMsg.includes('Categories') &&
+        backendMsg.includes('was altered from null');
+
+      if (!isCategoryHibernateBug) throw err;
+
+      // Fallback 1: thử format object category.
+      try {
+        await api.put(`/product/${id}`, {
+          name: data.name,
+          description: data.description || '',
+          basePrice: normalizedPrice,
+          imageUrl: data.imageUrl || '',
+          category: { id: normalizedCategoryId },
+        });
+      } catch {
+        // Fallback 2: không đổi category để vẫn cập nhật được thông tin và tồn kho.
+        await api.put(`/product/${id}`, {
+          name: data.name,
+          description: data.description || '',
+          basePrice: normalizedPrice,
+          imageUrl: data.imageUrl || '',
+        });
+      }
+    }
+
+    // Đồng bộ "tồn kho tổng" vào variant để đảm bảo reload không bị về 0.
+    const productVariants = variants.filter(v => String(v.productId) === String(numericId));
+    if (productVariants.length === 0) {
+      await api.post('/product-variant', {
+        sizeName: '',
+        colorName: '',
+        price: normalizedPrice,
+        stock: normalizedStock,
+        variantImageUrl: data.imageUrl || '',
+        productId: numericId,
+      });
+    } else if (productVariants.length === 1) {
+      const current = productVariants[0];
+      await api.put(`/product-variant/${current.id}`, {
+        sizeName: current.sizeName || '',
+        colorName: current.colorName || '',
+        price: toNumber(current.price, normalizedPrice),
+        stock: normalizedStock,
+        variantImageUrl: current.variantImageUrl || '',
+      });
+    }
+
     setProducts(prev => prev.map(p =>
-      p.id === id ? { ...p, ...data, updatedAt: new Date().toISOString() } : p
+      p.id === numericId ? { ...p, ...data, stockQuantity: normalizedStock, updatedAt: new Date().toISOString() } : p
     ));
   };
 
@@ -163,7 +266,7 @@ export const ShopProvider = ({ children }) => {
   const getProduct = (id) => products.find(p => p.id === parseInt(id));
 
   // ---- Variant CRUD ----
-  const getVariantsByProduct = (productId) => variants.filter(v => v.productId === parseInt(productId));
+  const getVariantsByProduct = (productId) => variants.filter(v => String(v.productId) === String(productId));
 
   const addVariant = async (data) => {
     const payload = {
@@ -177,8 +280,20 @@ export const ShopProvider = ({ children }) => {
     };
     const res = await api.post('/product-variant', payload);
     if (!res.data?.data) throw new Error('Không thể tạo phân loại');
-    const newV = { ...res.data.data, productId: data.productId };
-    setVariants(prev => [...prev, newV]);
+    const newV = mapVariant(res.data.data, data.productId);
+    const map = loadVariantProductMap();
+    map[String(newV.id)] = data.productId;
+    saveVariantProductMap(map);
+    setVariants(prev => {
+      const next = [...prev, newV];
+      const totalStock = next
+        .filter(v => String(v.productId) === String(data.productId))
+        .reduce((sum, v) => sum + toNumber(v.stock, 0), 0);
+      setProducts(productsPrev => productsPrev.map(p =>
+        String(p.id) === String(data.productId) ? { ...p, stockQuantity: totalStock } : p
+      ));
+      return next;
+    });
     return newV;
   };
 
@@ -193,12 +308,39 @@ export const ShopProvider = ({ children }) => {
       product: { id: data.productId }
     };
     await api.put(`/product-variant/${id}`, payload);
-    setVariants(prev => prev.map(v => v.id === id ? { ...v, ...data } : v));
+    setVariants(prev => {
+      const next = prev.map(v => String(v.id) === String(id) ? { ...v, ...data } : v);
+      const affectedProductId = data.productId ?? prev.find(v => String(v.id) === String(id))?.productId;
+      if (affectedProductId !== undefined && affectedProductId !== null) {
+        const totalStock = next
+          .filter(v => String(v.productId) === String(affectedProductId))
+          .reduce((sum, v) => sum + toNumber(v.stock, 0), 0);
+        setProducts(productsPrev => productsPrev.map(p =>
+          String(p.id) === String(affectedProductId) ? { ...p, stockQuantity: totalStock } : p
+        ));
+      }
+      return next;
+    });
   };
 
   const deleteVariant = async (id) => {
+    const removedVariant = variants.find(v => String(v.id) === String(id));
     await api.delete(`/product-variant/${id}`);
-    setVariants(prev => prev.filter(v => v.id !== id));
+    const map = loadVariantProductMap();
+    delete map[String(id)];
+    saveVariantProductMap(map);
+    setVariants(prev => {
+      const next = prev.filter(v => String(v.id) !== String(id));
+      if (removedVariant?.productId !== undefined && removedVariant?.productId !== null) {
+        const totalStock = next
+          .filter(v => String(v.productId) === String(removedVariant.productId))
+          .reduce((sum, v) => sum + toNumber(v.stock, 0), 0);
+        setProducts(productsPrev => productsPrev.map(p =>
+          String(p.id) === String(removedVariant.productId) ? { ...p, stockQuantity: totalStock } : p
+        ));
+      }
+      return next;
+    });
   };
 
   const getVariant = (id) => variants.find(v => v.id === id);
@@ -233,7 +375,7 @@ export const ShopProvider = ({ children }) => {
         // Log the actual error to help debugging
         console.error('Failed to create order detail:', err.response?.data || err.message);
 
-        try { await api.delete(`/order/${orderId}`); } catch (e) { } // Rollback order
+        try { await api.delete(`/order/${orderId}`); } catch { /* ignore rollback failure */ } // Rollback order
 
         const backendMsg = err.response?.data?.message;
         throw new Error(backendMsg || 'Lỗi khi tạo chi tiết đơn hàng. Vui lòng kiểm tra lại sản phẩm.');
@@ -280,7 +422,7 @@ export const ShopProvider = ({ children }) => {
     const apiOrders = await Promise.all(res.data.data.map(async (o) => {
       let items = [];
       try {
-        const detailRes = await api.get(`/order-detail/get-by-orderid?uid=${o.id}`);
+        const detailRes = await api.get(`/order-detail/get-by-orderid?orderId=${o.id}`);
         if (detailRes.data?.data) {
           items = detailRes.data.data.map(d => ({
             id: d.id,
@@ -311,7 +453,7 @@ export const ShopProvider = ({ children }) => {
     }));
 
     setOrders(apiOrders);
-    
+
     // Nếu truyền returnAll = true, trả về toàn bộ. Ngược lại lọc theo userId
     const finalOrders = returnAll ? apiOrders : apiOrders.filter(o => o.userId === userId);
     return finalOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));

@@ -10,21 +10,31 @@ import {
 
 const AdminDashboard = () => {
   const { orders } = useShop();
-  const { users } = useAuth();
   const [stats, setStats] = useState(null);
+  const [usersInfo, setUsersInfo] = useState([]);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetchDashboard = async () => {
       try {
-        const res = await api.get('/api/v1/admin/dashboard/summary');
+        const [res, userRes] = await Promise.all([
+          api.get('/api/v1/admin/dashboard/summary'),
+          api.get('/user?page=1&size=1000')
+        ]);
+        
         if (res.data?.data) {
           setStats(res.data.data);
         }
+        
+        if (userRes.data?.data?.content) {
+          setUsersInfo(userRes.data.data.content);
+        } else if (Array.isArray(userRes.data?.data)) {
+          setUsersInfo(userRes.data.data);
+        }
       } catch (err) {
-        console.error('Failed to load dashboard stats', err);
+        console.error('Lỗi lấy dashboard:', err);
       }
     };
-    fetchStats();
+    fetchDashboard();
   }, []);
 
   const totalRevenue = stats?.totalRevenue || 0;
@@ -143,7 +153,7 @@ const AdminDashboard = () => {
               </thead>
               <tbody>
                 {[...orders].sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate)).slice(0, 8).map((order) => {
-                  const user = users.find((u) => u.id === order.userId);
+                  const user = usersInfo.find((u) => u.id === order.userId);
                   const colors = { 0: '#f9a825', 1: '#2e7d32', 2: '#c62828' };
                   const labels = { 0: 'Đang đặt', 1: 'Đã nhận', 2: 'Đã hủy' };
                   return (

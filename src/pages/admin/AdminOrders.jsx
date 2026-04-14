@@ -3,6 +3,7 @@ import { FiSearch, FiChevronDown, FiChevronUp, FiEye } from 'react-icons/fi';
 import { useShop } from '../../contexts/ShopContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency, formatDate, ORDER_STATUS_LABEL, ORDER_STATUS_COLOR } from '../../utils/formatUtils';
+import api from '../../utils/api';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Modal from '../../components/common/Modal';
 import { toast } from 'react-toastify';
@@ -11,32 +12,43 @@ const STATUS_OPTIONS = ['Tất cả', 0, 1, 2];
 
 const AdminOrders = () => {
   const { getUserOrders, updateOrderStatus } = useShop();
-  const { users, currentUser } = useAuth();
+  const { currentUser } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [usersInfo, setUsersInfo] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [statusFilter, setStatusFilter] = useState('Tất cả');
   const [search, setSearch] = useState('');
   const [detailOrder, setDetailOrder] = useState(null);
 
   useEffect(() => {
-    const fetchOrders = async () => {
+    const fetchData = async () => {
       setLoadingOrders(true);
       try {
-        // Gọi getUserOrders với tham số thứ 2 là true để lấy TẤT CẢ đơn hàng 
-        const result = await getUserOrders(currentUser?.id, true);
-        setOrders(result || []);
+        const [ordersResult, usersResult] = await Promise.all([
+          getUserOrders(currentUser?.id, true),
+          api.get('/user?page=1&size=1000')
+        ]);
+        setOrders(ordersResult || []);
+
+        if (usersResult?.data?.data?.content) {
+          setUsersInfo(usersResult.data.data.content);
+        } else if (Array.isArray(usersResult?.data?.data)) {
+          setUsersInfo(usersResult.data.data);
+        }
+      } catch (err) {
+        console.error("Lỗi lấy dữ liệu trang AdminOrders", err);
       } finally {
         setLoadingOrders(false);
       }
     };
-    fetchOrders();
+    fetchData();
   }, []);
 
   const filtered = orders
     .filter((o) => statusFilter === 'Tất cả' || o.status === statusFilter)
     .filter((o) => {
       if (!search.trim()) return true;
-      const user = users.find((u) => u.id === o.userId);
+      const user = usersInfo.find((u) => u.id === o.userId);
       return (
         String(o.id).includes(search) ||
         user?.fullName?.toLowerCase().includes(search.toLowerCase())
@@ -56,7 +68,7 @@ const AdminOrders = () => {
   };
 
   // User lookup: tìm theo userId hoặc email (backend trả về email)
-  const getUser = (userId) => users.find((u) => u.id === userId || u.email === userId);
+  const getUser = (userId) => usersInfo.find((u) => u.id === userId || u.email === userId);
 
   return (
     <AdminLayout>
@@ -108,7 +120,7 @@ const AdminOrders = () => {
                   <th>Mã đơn</th>
                   <th>Khách hàng</th>
                   <th>Ngày đặt</th>
-                  <th>SP</th>
+                  {/* <th>SP</th> */}
                   <th>Giảm giá</th>
                   <th>Tổng tiền</th>
                   <th>Trạng thái</th>
@@ -130,7 +142,7 @@ const AdminOrders = () => {
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{user?.email || order.userEmail || ''}</div>
                       </td>
                       <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(order.orderDate)}</td>
-                      <td style={{ fontWeight: 600 }}>{order.items?.length || 0}</td>
+                      {/* <td style={{ fontWeight: 600 }}>{order.items?.length || 0}</td> */}
                       <td style={{ color: 'var(--success)', fontWeight: 600 }}>
                         {order.discountApplied > 0 ? `-${formatCurrency(order.discountApplied)}` : '—'}
                       </td>

@@ -17,9 +17,9 @@ const EMPTY_VARIANT_FORM = {
 };
 
 const AdminProducts = () => {
-  const { 
+  const {
     products, categories, addProduct, updateProduct, deleteProduct, getCategoryName,
-    getVariantsByProduct, addVariant, updateVariant, deleteVariant 
+    getVariantsByProduct, addVariant, updateVariant, deleteVariant
   } = useShop();
   const [search, setSearch] = useState('');
   const [filterCategoryId, setFilterCategoryId] = useState('all');
@@ -45,6 +45,8 @@ const AdminProducts = () => {
     const matchSearch = !search.trim() || p.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
+  const editingVariants = editingId ? getVariantsByProduct(editingId) : [];
+  const editingTotalVariantStock = editingVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
 
   const openAdd = () => {
     setEditingId(null);
@@ -97,7 +99,7 @@ const AdminProducts = () => {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.price || !form.stockQuantity) {
+    if (!form.name.trim() || !form.price) {
       toast.error('Vui lòng điền đủ thông tin bắt buộc!');
       return;
     }
@@ -115,23 +117,14 @@ const AdminProducts = () => {
       setUploading(false);
     }
 
-    // Validation: Total stock cannot be less than the SUM of all variants' stock
-    if (editingId) {
-      const existingVariants = getVariantsByProduct(editingId);
-      const variantsTotalStock = existingVariants.reduce((sum, v) => sum + v.stock, 0);
-      if (variantsTotalStock > parseInt(form.stockQuantity)) {
-        toast.error(`Tổng tồn kho (${form.stockQuantity}) không được nhỏ hơn tổng số lượng của các phân loại (${variantsTotalStock})! Vui lòng tăng tổng tồn kho hoặc giảm tồn kho của các phân loại.`);
-        return;
-      }
-    }
-
     try {
       if (editingId) {
+        const stockFromVariants = getVariantsByProduct(editingId).reduce((sum, v) => sum + (v.stock || 0), 0);
         await updateProduct(editingId, {
           ...form,
           imageUrl: finalImageUrl,
           price: parseFloat(form.price),
-          stockQuantity: parseInt(form.stockQuantity),
+          stockQuantity: stockFromVariants,
           categoryId: parseInt(form.categoryId),
         });
         toast.success('Cập nhật sản phẩm thành công!');
@@ -164,7 +157,7 @@ const AdminProducts = () => {
 
   // ---- Variants Logic ----
   const activeVariants = activeProductId ? getVariantsByProduct(activeProductId) : [];
-  
+
   const openVariants = (product) => {
     setActiveProductId(product.id);
     setVariantForm(EMPTY_VARIANT_FORM);
@@ -179,18 +172,6 @@ const AdminProducts = () => {
     }
     if (!variantForm.price || !variantForm.stock) {
       toast.error('Cần nhập giá và tồn kho riêng cho phân loại này!'); return;
-    }
-
-    const parentProduct = products.find(p => p.id === activeProductId);
-    if (parentProduct) {
-      // Tính tổng tồn kho của các phân loại khác + phân loại đang chỉnh sửa này
-      const otherVariants = activeVariants.filter(v => v.id !== editingVariantId);
-      const totalStockWithNew = otherVariants.reduce((sum, v) => sum + v.stock, 0) + parseInt(variantForm.stock);
-
-      if (totalStockWithNew > parentProduct.stockQuantity) {
-        toast.error(`Tổng tồn kho các phân loại (${totalStockWithNew}) không được vượt quá số lượng tổng của sản phẩm (${parentProduct.stockQuantity})!`);
-        return;
-      }
     }
 
     let finalImageUrl = variantForm.variantImageUrl;
@@ -381,8 +362,19 @@ const AdminProducts = () => {
             <input className="form-input" type="number" placeholder="199000" value={form.price} onChange={set('price')} />
           </div>
           <div className="form-group">
-            <label className="form-label">Tồn kho *</label>
-            <input className="form-input" type="number" placeholder="100" value={form.stockQuantity} onChange={set('stockQuantity')} />
+            <label className="form-label">{editingId ? 'Tổng tồn kho (từ phân loại)' : 'Tồn kho *'}</label>
+            {editingId ? (
+              <input
+                className="form-input"
+                type="number"
+                value={editingTotalVariantStock}
+                disabled
+                readOnly
+                title="Tồn kho được tính tự động từ tổng tồn kho các phân loại"
+              />
+            ) : (
+              <input className="form-input" type="number" placeholder="100" value={form.stockQuantity} onChange={set('stockQuantity')} />
+            )}
           </div>
         </div>
         <div className="form-group">
@@ -432,7 +424,7 @@ const AdminProducts = () => {
         size="lg"
       >
         <div style={{ display: 'flex', gap: '16px', flexDirection: 'column' }}>
-          
+
           {/* Variant Form */}
           <div style={{ background: 'var(--bg)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
             <h4 style={{ fontSize: '14px', marginBottom: '12px', fontWeight: 700 }}>
