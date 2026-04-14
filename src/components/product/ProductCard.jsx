@@ -16,6 +16,11 @@ const ProductCard = ({ product }) => {
   const variants = getVariantsByProduct(product.id);
   const uniqueSizes = [...new Set(variants.map(v => v.sizeName).filter(Boolean))];
 
+  const totalStock = variants.length > 0 
+    ? variants.reduce((sum, v) => sum + (v.stock || 0), 0)
+    : (product.stockQuantity || 0);
+  const isOutOfStock = totalStock <= 0;
+
   const handleAddToCart = (e) => {
     e.stopPropagation();
     if (!currentUser) {
@@ -37,16 +42,23 @@ const ProductCard = ({ product }) => {
       <div className="product-card-img">
         <img src={product.imageUrl} alt={product.name} className="img-cover" />
         <div className="product-card-overlay">
-          <button className="quick-add-btn" onClick={handleAddToCart}>
-            <FiShoppingCart /> Thêm vào giỏ
-          </button>
+          {!isOutOfStock ? (
+            <button className="quick-add-btn" onClick={handleAddToCart}>
+              <FiShoppingCart /> Thêm vào giỏ
+            </button>
+          ) : (
+            <button className="quick-add-btn" style={{ background: '#b0bec5', color: '#fff', cursor: 'not-allowed' }} onClick={(e) => { e.stopPropagation(); toast.error('Sản phẩm này tạm thời hết hàng!'); }}>
+              Hết hàng
+            </button>
+          )}
         </div>
-        {product.sold > 200 && (
+        {isOutOfStock ? (
+          <div className="product-low-badge" style={{ background: '#e53935' }}>Hết hàng</div>
+        ) : product.sold > 200 ? (
           <div className="product-hot-badge">🔥 Hot</div>
-        )}
-        {product.stockQuantity < 20 && product.stockQuantity > 0 && (
+        ) : totalStock < 20 && totalStock > 0 ? (
           <div className="product-low-badge">Sắp hết</div>
-        )}
+        ) : null}
       </div>
       <div className="product-card-body">
         <p className="product-card-name line-clamp-2">{product.name}</p>

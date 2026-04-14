@@ -222,9 +222,9 @@ export const ShopProvider = ({ children }) => {
       try {
         await Promise.all(
           items.map(item => api.post('/order-detail', {
-            order: { id: orderId },
-            product: { id: item.productId },
-            ...(item.variantId ? { variant: { id: item.variantId } } : {}),
+            orderId: orderId,
+            productId: item.productId,
+            variantId: item.variantId || null,
             quantity: item.quantity,
             unitPrice: item.unitPrice || item.price,
           }))
