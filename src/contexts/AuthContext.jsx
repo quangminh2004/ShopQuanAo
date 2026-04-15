@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Đăng ký API
-  const register = async ({ username, password, fullName, email }) => {
+  const register = async ({ password, fullName, email }) => {
     try {
       // Schema hiện tại: fullName, email, address + password ở query param 
       const payload = {
