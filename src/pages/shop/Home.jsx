@@ -22,7 +22,7 @@ const Home = () => {
 
   const filtered = useMemo(() => {
     let list = [...products];
-    if (categoryId !== 'all') list = list.filter((p) => p.categoryId === categoryId);
+    if (categoryId !== 'all') list = list.filter((p) => String(p.categoryId) === String(categoryId));
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q));
@@ -64,9 +64,9 @@ const Home = () => {
           <div className="hero-float-card hero-float-2">💎 -15% Kim Cương</div>
           <div className="hero-float-card hero-float-3">🔥 Hot 500+ đã bán</div>
           <img
-            src="https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&h=700&fit=crop"
+            src="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&h=700&fit=crop"
             alt="LUNINA Fashion"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '24px' }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', borderRadius: '24px' }}
           />
         </div>
       </div>

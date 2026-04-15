@@ -8,7 +8,7 @@ import { toast } from 'react-toastify';
 import api from '../../utils/api';
 
 const EMPTY_FORM = {
-  name: '', description: '', price: '', categoryId: 1,
+  name: '', description: '', price: '', categoryId: '',
   imageUrl: '', stockQuantity: '',
 };
 
@@ -41,7 +41,7 @@ const AdminProducts = () => {
   const setV = (field) => (e) => setVariantForm({ ...variantForm, [field]: e.target.value });
 
   const filtered = products.filter((p) => {
-    const matchCat = filterCategoryId === 'all' || p.categoryId === parseInt(filterCategoryId);
+    const matchCat = filterCategoryId === 'all' || String(p.categoryId) === String(filterCategoryId);
     const matchSearch = !search.trim() || p.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
@@ -50,7 +50,10 @@ const AdminProducts = () => {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm(EMPTY_FORM);
+    setForm({
+      ...EMPTY_FORM,
+      categoryId: categories[0]?.id ?? '',
+    });
     setImageFile(null);
     setModalOpen(true);
   };
@@ -70,32 +73,104 @@ const AdminProducts = () => {
   };
 
   const uploadImage = async (file) => {
-    // Thử field 'image' trước
-    const tryUpload = async (fieldName) => {
-      const formData = new FormData();
-      formData.append(fieldName, file);
-      const res = await api.post('/upload/image', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      // Hỗ trợ nhiều cấu trúc response
-      if (res.data?.success && res.data?.data) return res.data.data;
-      if (typeof res.data === 'string' && res.data.startsWith('http')) return res.data;
-      if (res.data?.url) return res.data.url;
-      if (res.data?.imageUrl) return res.data.imageUrl;
-      throw new Error('Không nhận được URL ảnh từ server');
+    if (!file) throw new Error('Không có file để upload');
+
+    const extractUrl = (resData) => {
+      const data = resData?.data;
+      if (typeof data === 'string' && data.trim()) return data;
+      if (Array.isArray(data) && typeof data[0] === 'string' && data[0].trim()) return data[0];
+      if (typeof resData?.url === 'string' && resData.url.trim()) return resData.url;
+      if (typeof data?.url === 'string' && data.url.trim()) return data.url;
+      return null;
     };
 
-    try {
-      return await tryUpload('image');
-    } catch (err1) {
-      console.warn('Upload với field "image" thất bại, thử "file"...', err1);
+    const normalizeUploadFile = async (originalFile) => {
+      // Re-encode ảnh về JPEG để tránh lỗi backend do metadata/format ảnh gốc.
+      if (!originalFile.type?.startsWith('image/')) return originalFile;
+
       try {
-        return await tryUpload('file');
-      } catch (err2) {
-        console.warn('Upload với field "file" cũng thất bại:', err2);
-        throw new Error('Lỗi upload ảnh! Server trả lỗi 500. Hãy dùng URL ảnh trực tiếp.');
+        const bitmap = await createImageBitmap(originalFile);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return originalFile;
+        ctx.drawImage(bitmap, 0, 0);
+
+        const jpegBlob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, 'image/jpeg', 0.92)
+        );
+        if (!jpegBlob) return originalFile;
+
+        const safeName = (originalFile.name || 'upload')
+          .replace(/\.[^.]+$/, '')
+          .replace(/\s+/g, '-');
+
+        return new File([jpegBlob], `${safeName}.jpg`, { type: 'image/jpeg' });
+      } catch {
+        return originalFile;
+      }
+    };
+
+    const preparedFile = await normalizeUploadFile(file);
+    const baseURL = (api.defaults.baseURL || '').replace(/\/$/, '');
+    const storedUser = localStorage.getItem('lunina_current_user');
+    let authToken = '';
+    try {
+      authToken = storedUser ? JSON.parse(storedUser)?.token || '' : '';
+    } catch {
+      authToken = '';
+    }
+
+    const uploadAttempts = [
+      { endpoint: '/upload/image', fieldName: 'file', withAuth: false },
+      { endpoint: '/upload/image', fieldName: 'file', withAuth: true },
+      { endpoint: '/upload/list-image', fieldName: 'file', withAuth: false },
+      { endpoint: '/upload/list-image', fieldName: 'file', withAuth: true },
+      { endpoint: '/upload/list-image', fieldName: 'files', withAuth: false },
+      { endpoint: '/upload/list-image', fieldName: 'files', withAuth: true },
+    ];
+
+    let lastError = null;
+
+    for (const attempt of uploadAttempts) {
+      const formData = new FormData();
+      formData.append(attempt.fieldName, preparedFile, preparedFile.name);
+      const headers = {};
+      if (attempt.withAuth && authToken) {
+        headers.Authorization = `Bearer ${authToken}`;
+      }
+      try {
+        const response = await fetch(`${baseURL}${attempt.endpoint}`, {
+          method: 'POST',
+          body: formData,
+          headers,
+        });
+
+        let body = null;
+        try {
+          body = await response.json();
+        } catch {
+          body = null;
+        }
+
+        if (!response.ok) {
+          lastError = new Error(
+            body?.message ||
+            `Upload thất bại (${response.status}) tại ${attempt.endpoint}`
+          );
+          continue;
+        }
+
+        const uploadedUrl = extractUrl(body);
+        if (uploadedUrl) return uploadedUrl;
+        lastError = new Error(`API ${attempt.endpoint} không trả về URL ảnh hợp lệ`);
+      } catch (err) {
+        lastError = err;
       }
     }
+
+    throw new Error(lastError?.message || 'Upload ảnh thất bại');
   };
 
   const handleSave = async () => {
@@ -109,6 +184,7 @@ const AdminProducts = () => {
       setUploading(true);
       try {
         finalImageUrl = await uploadImage(imageFile);
+        setForm(prev => ({ ...prev, imageUrl: finalImageUrl }));
       } catch (e) {
         toast.error(e.message);
         setUploading(false);
@@ -125,7 +201,7 @@ const AdminProducts = () => {
           imageUrl: finalImageUrl,
           price: parseFloat(form.price),
           stockQuantity: stockFromVariants,
-          categoryId: parseInt(form.categoryId),
+          categoryId: form.categoryId,
         });
         toast.success('Cập nhật sản phẩm thành công!');
       } else {
@@ -133,8 +209,8 @@ const AdminProducts = () => {
           ...form,
           imageUrl: finalImageUrl,
           price: parseFloat(form.price),
-          stockQuantity: parseInt(form.stockQuantity),
-          categoryId: parseInt(form.categoryId),
+          stockQuantity: 0,
+          categoryId: form.categoryId,
           sold: 0,
         });
         toast.success('Thêm sản phẩm thành công!');
@@ -361,9 +437,9 @@ const AdminProducts = () => {
             <label className="form-label">Giá (VNĐ) *</label>
             <input className="form-input" type="number" placeholder="199000" value={form.price} onChange={set('price')} />
           </div>
-          <div className="form-group">
-            <label className="form-label">{editingId ? 'Tổng tồn kho (từ phân loại)' : 'Tồn kho *'}</label>
-            {editingId ? (
+          {editingId && (
+            <div className="form-group">
+              <label className="form-label">Tổng tồn kho (từ phân loại)</label>
               <input
                 className="form-input"
                 type="number"
@@ -372,10 +448,8 @@ const AdminProducts = () => {
                 readOnly
                 title="Tồn kho được tính tự động từ tổng tồn kho các phân loại"
               />
-            ) : (
-              <input className="form-input" type="number" placeholder="100" value={form.stockQuantity} onChange={set('stockQuantity')} />
-            )}
-          </div>
+            </div>
+          )}
         </div>
         <div className="form-group">
           <label className="form-label">Danh mục</label>

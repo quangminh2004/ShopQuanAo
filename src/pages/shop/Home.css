@@ -4,10 +4,11 @@
   min-height: 480px;
   display: flex;
   align-items: center;
+  justify-content: center;
   position: relative;
   overflow: hidden;
   padding: 60px 48px;
-  gap: 40px;
+  gap: clamp(20px, 4vw, 56px);
 }
 
 .hero-banner::before {
@@ -35,7 +36,7 @@
 }
 
 .hero-content {
-  flex: 1;
+  flex: 0 1 560px;
   color: #fff;
   position: relative;
   z-index: 1;
@@ -78,13 +79,14 @@
 
 .hero-image {
   flex: 0 0 auto;
-  width: 380px;
-  height: 400px;
+  width: 430px;
+  height: 460px;
   border-radius: 24px;
   overflow: hidden;
   position: relative;
   z-index: 1;
   box-shadow: 0 24px 60px rgba(0,0,0,0.25);
+  align-self: flex-end;
 }
 
 /* Floating cards */
@@ -201,7 +203,7 @@
 
 @media (max-width: 900px) {
   .hero-banner { flex-direction: column; padding: 40px 24px; text-align: center; }
-  .hero-image { width: 100%; max-width: 320px; height: 280px; }
+  .hero-image { width: 100%; max-width: 340px; height: 300px; align-self: center; }
   .hero-content { max-width: 100%; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
 }

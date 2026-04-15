@@ -16,7 +16,7 @@ const ProductCard = ({ product }) => {
   const variants = getVariantsByProduct(product.id);
   const uniqueSizes = [...new Set(variants.map(v => v.sizeName).filter(Boolean))];
 
-  const totalStock = variants.length > 0 
+  const totalStock = variants.length > 0
     ? variants.reduce((sum, v) => sum + (v.stock || 0), 0)
     : (product.stockQuantity || 0);
   const isOutOfStock = totalStock <= 0;
@@ -62,7 +62,7 @@ const ProductCard = ({ product }) => {
       </div>
       <div className="product-card-body">
         <p className="product-card-name line-clamp-2">{product.name}</p>
-        
+
         {uniqueSizes.length > 0 && (
           <div className="product-card-sizes">
             {uniqueSizes.map(size => (
@@ -75,7 +75,7 @@ const ProductCard = ({ product }) => {
           <span className="product-card-price">{formatCurrency(product.price)}</span>
           <div className="product-card-sold">
             <FiStar style={{ color: '#f9a825', fontSize: '12px' }} />
-            <span>Đã bán {product.sold > 999 ? `${(product.sold/1000).toFixed(1)}k` : product.sold}</span>
+            <span>Đã bán {product.sold > 999 ? `${(product.sold / 1000).toFixed(1)}k` : product.sold}</span>
           </div>
         </div>
       </div>

@@ -59,21 +59,21 @@ export const ShopProvider = ({ children }) => {
         const prodRes = await api.get('/product');
         const prodData = prodRes.data?.data;
         if (Array.isArray(prodData)) {
-          const variantRes = await api.get('/product-variant?page=1&size=1000');
-          const variantData = Array.isArray(variantRes.data?.data) ? variantRes.data.data : [];
-          const variantProductMap = loadVariantProductMap();
-          const allVariants = variantData
-            .map(v => {
-              const mappedProductId =
-                v?.productId ??
-                v?.product?.id ??
-                variantProductMap[String(v?.id)] ??
-                (prodData.length === 1 ? prodData[0]?.id : null);
-              return mapVariant(v, mappedProductId);
-            })
-            .filter(v => v.productId !== null && v.productId !== undefined);
 
-          const nextMap = { ...variantProductMap };
+          // ✅ Fetch variant theo từng product — productId luôn đúng
+          const variantResults = await Promise.all(
+            prodData.map(p =>
+              api.get(`/product-variant/get-by-productid?productId=${p.id}`)
+                .then(r => Array.isArray(r.data?.data) ? r.data.data : [])
+                .catch(() => [])
+            )
+          );
+
+          const allVariants = variantResults.flatMap((variants, index) =>
+            variants.map(v => mapVariant(v, prodData[index].id))
+          );
+
+          const nextMap = {};
           allVariants.forEach(v => { nextMap[String(v.id)] = v.productId; });
           saveVariantProductMap(nextMap);
           setVariants(allVariants);
@@ -94,7 +94,7 @@ export const ShopProvider = ({ children }) => {
               categoryId: p.category?.id || null,
               // Luôn ưu tiên tổng stock của variants nếu sản phẩm có phân loại.
               stockQuantity: hasVariants ? stockFromVariants : (stockFromProduct ?? 0),
-              sold: p.sold ?? 0,
+              sold: p.sold ?? p.soldQuantity ?? p.totalSold ?? 0,
               createdAt: p.createdAt || new Date().toISOString(),
             };
           });
@@ -150,17 +150,21 @@ export const ShopProvider = ({ children }) => {
     await refreshCategories();
   };
 
-  const getCategoryName = (categoryId) => categories.find(c => c.id === categoryId)?.name || '—';
+  const getCategoryName = (categoryId) => categories.find(c => String(c.id) === String(categoryId))?.name || '—';
 
   // ---- Product CRUD ----
   const addProduct = async (data) => {
+    const normalizedCategoryId = data.categoryId;
+    if (normalizedCategoryId === undefined || normalizedCategoryId === null || String(normalizedCategoryId).trim() === '') {
+      throw new Error('Vui lòng chọn danh mục hợp lệ.');
+    }
     const payload = {
       name: data.name,
       description: data.description || '',
       basePrice: data.price,
       imageUrl: data.imageUrl || '',
       stockQuantity: data.stockQuantity || 0,
-      categoryId: parseInt(data.categoryId),
+      categoryId: normalizedCategoryId,
     };
     const res = await api.post('/product', payload);
     if (!res.data?.data) throw new Error('Không thể tạo sản phẩm');
@@ -171,7 +175,7 @@ export const ShopProvider = ({ children }) => {
       description: p.description || data.description,
       price: p.basePrice || p.price || data.price,
       imageUrl: p.imageUrl || data.imageUrl,
-      categoryId: p.category?.id || data.categoryId,
+      categoryId: p.category?.id ?? data.categoryId,
       stockQuantity: data.stockQuantity || 0,
       sold: 0,
       createdAt: p.createdAt || new Date().toISOString(),
@@ -185,10 +189,7 @@ export const ShopProvider = ({ children }) => {
     const normalizedStock = toNumber(data.stockQuantity, 0);
     const normalizedPrice = toNumber(data.price, 0);
     const existingProduct = products.find(p => String(p.id) === String(numericId));
-    const normalizedCategoryId = toNumber(
-      data.categoryId ?? existingProduct?.categoryId,
-      NaN
-    );
+    const normalizedCategoryId = data.categoryId ?? existingProduct?.categoryId;
     const payload = {
       name: data.name,
       description: data.description || '',
@@ -196,7 +197,7 @@ export const ShopProvider = ({ children }) => {
       imageUrl: data.imageUrl || '',
       categoryId: normalizedCategoryId,
     };
-    if (!Number.isFinite(normalizedCategoryId)) {
+    if (normalizedCategoryId === undefined || normalizedCategoryId === null || String(normalizedCategoryId).trim() === '') {
       throw new Error('Danh mục không hợp lệ, vui lòng chọn lại danh mục.');
     }
     try {
@@ -240,6 +241,7 @@ export const ShopProvider = ({ children }) => {
         stock: normalizedStock,
         variantImageUrl: data.imageUrl || '',
         productId: numericId,
+        product: { id: numericId },
       });
     } else if (productVariants.length === 1) {
       const current = productVariants[0];
@@ -308,6 +310,11 @@ export const ShopProvider = ({ children }) => {
       product: { id: data.productId }
     };
     await api.put(`/product-variant/${id}`, payload);
+    if (data.productId !== undefined && data.productId !== null) {
+      const map = loadVariantProductMap();
+      map[String(id)] = data.productId;
+      saveVariantProductMap(map);
+    }
     setVariants(prev => {
       const next = prev.map(v => String(v.id) === String(id) ? { ...v, ...data } : v);
       const affectedProductId = data.productId ?? prev.find(v => String(v.id) === String(id))?.productId;
