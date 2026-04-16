@@ -19,6 +19,7 @@ const AdminCustomers = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedUserOrders, setSelectedUserOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Hiển thị users từ API nếu có, fallback về localStorage
   const users = apiUsers.length > 0 ? apiUsers : localUsers;
@@ -43,7 +44,7 @@ const AdminCustomers = () => {
           }));
           setApiUsers(mapped);
         }
-      } catch(err) {
+      } catch (err) {
         console.warn('API fetch users fail:', err);
       } finally {
         setLoadingUsers(false);
@@ -60,6 +61,74 @@ const AdminCustomers = () => {
       setSelectedUserOrders(orders || []);
     } finally {
       setLoadingOrders(false);
+    }
+  };
+
+  const getFilenameFromHeader = (header) => {
+    if (!header) return 'danh-sach-khach-hang.xlsx';
+    const utfMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1]);
+    const normalMatch = header.match(/filename="?([^"]+)"?/i);
+    return normalMatch?.[1] || 'danh-sach-khach-hang.xlsx';
+  };
+
+  const downloadBlob = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const escapeCsvValue = (value) => {
+    const text = String(value ?? '');
+    const escaped = text.replace(/"/g, '""');
+    return `"${escaped}"`;
+  };
+
+  const exportCustomersToCsv = () => {
+    const headers = ['ID', 'Họ tên', 'Email', 'Hạng', 'Tổng chi tiêu', 'Điểm tích lũy'];
+    const rows = customers.map((u) => [
+      u.id,
+      u.fullName || '',
+      u.email || '',
+      RANK_CONFIG[u.rank]?.label || u.rank || '',
+      u.totalSpending || 0,
+      u.points || 0,
+    ]);
+
+    const csvContent = [
+      headers.map(escapeCsvValue).join(','),
+      ...rows.map((row) => row.map(escapeCsvValue).join(',')),
+    ].join('\n');
+
+    const csvBlob = new Blob([`\uFEFF${csvContent}`], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    downloadBlob(csvBlob, `danh-sach-khach-hang-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const response = await api.get('/user/export/excel', {
+        responseType: 'blob', // response.data đã là Blob
+      });
+
+      const contentDisposition = response.headers?.['content-disposition'];
+      const filename = getFilenameFromHeader(contentDisposition);
+
+      // ✅ Dùng thẳng response.data, không wrap lại Blob
+      downloadBlob(response.data, filename);
+    } catch (err) {
+      console.warn('Export excel thất bại:', err);
+      exportCustomersToCsv();
+      alert('API export đang lỗi, hệ thống đã xuất file CSV từ dữ liệu hiện có.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -86,7 +155,9 @@ const AdminCustomers = () => {
       <div style={{ padding: '32px' }}>
         <div style={{ marginBottom: '28px' }}>
           <h1 style={{ fontSize: '24px', fontWeight: 800 }}>👥 Quản lý khách hàng</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>{customers.length} thành viên</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
+            {loadingUsers ? 'Đang tải khách hàng...' : `${customers.length} thành viên`}
+          </p>
         </div>
 
         {/* Rank Summary */}
@@ -118,6 +189,14 @@ const AdminCustomers = () => {
               <option key={r} value={r}>{r === 'Tất cả' ? 'Tất cả hạng' : RANK_CONFIG[r]?.label}</option>
             ))}
           </select>
+          <button
+            className="btn btn-primary"
+            onClick={handleExportExcel}
+            disabled={exporting}
+            style={{ minWidth: '170px' }}
+          >
+            {exporting ? 'Đang xuất...' : 'Export Excel'}
+          </button>
         </div>
 
         {/* Table */}
@@ -130,7 +209,7 @@ const AdminCustomers = () => {
                   <th>Hạng thẻ</th>
                   <th>Tổng chi tiêu</th>
                   <th>Điểm tích lũy</th>
-                  <th>Ngày đăng ký</th>
+                  {/* <th>Ngày đăng ký</th> */}
                   <th style={{ textAlign: 'center' }}>Chi tiết</th>
                 </tr>
               </thead>
@@ -156,11 +235,11 @@ const AdminCustomers = () => {
                     <td><RankBadge rank={u.rank} size="sm" /></td>
                     <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{formatCurrency(u.totalSpending)}</td>
                     <td style={{ fontWeight: 700, color: '#f9a825' }}>⭐ {u.points?.toLocaleString() || 0}</td>
-                    <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(u.createdAt)}</td>
+                    {/* <td style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{formatDate(u.createdAt)}</td> */}
                     <td style={{ textAlign: 'center' }}>
-                       <button className="btn btn-ghost btn-sm btn-icon" onClick={() => handleSelectUser(u)}>
-                         <FiEye style={{ color: 'var(--info)' }} />
-                       </button>
+                      <button className="btn btn-ghost btn-sm btn-icon" onClick={() => handleSelectUser(u)}>
+                        <FiEye style={{ color: 'var(--info)' }} />
+                      </button>
                     </td>
                   </tr>
                 ))}
