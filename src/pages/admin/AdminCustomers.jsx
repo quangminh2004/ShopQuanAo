@@ -3,11 +3,19 @@ import { FiSearch, FiEye } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShop } from '../../contexts/ShopContext';
 import api from '../../utils/api';
-import { RANK_CONFIG, getRankProgress, getNextRank } from '../../utils/rankUtils';
+import { RANK_CONFIG, getRankProgress, getNextRank, getRankFromSpending, normalizeRank } from '../../utils/rankUtils';
 import { formatCurrency, formatDate, ORDER_STATUS_LABEL, ORDER_STATUS_COLOR } from '../../utils/formatUtils';
 import RankBadge from '../../components/common/RankBadge';
 import AdminLayout from '../../components/layout/AdminLayout';
 import Modal from '../../components/common/Modal';
+
+const RANK_ORDER = ['NORMAL', 'DONG', 'BAC', 'VANG', 'KIM_CUONG'];
+
+const getEffectiveRank = (user) => {
+  const spendingRank = getRankFromSpending(Number(user?.totalSpending || 0));
+  const apiRank = normalizeRank(user?.rank);
+  return RANK_ORDER.indexOf(spendingRank) > RANK_ORDER.indexOf(apiRank) ? spendingRank : apiRank;
+};
 
 const AdminCustomers = () => {
   const { users: localUsers } = useAuth();
@@ -29,16 +37,22 @@ const AdminCustomers = () => {
       setLoadingUsers(true);
       try {
         const res = await api.get('/user?page=1&size=1000');
-        if (res.data?.data) {
+        const userPayload = res.data?.data;
+        const userRows = Array.isArray(userPayload)
+          ? userPayload
+          : Array.isArray(userPayload?.content)
+            ? userPayload.content
+            : [];
+        if (userRows.length > 0) {
           // Map từ backend schema: { id, fullName, email, address, totalSpending, points, rank, role }
-          const mapped = res.data.data.map(u => ({
+          const mapped = userRows.map(u => ({
             id: u.id,
             fullName: u.fullName || 'Chưa có tên',
             email: u.email,
             address: u.address,
-            totalSpending: u.totalSpending || 0,
+            totalSpending: Number(u.totalSpending || 0),
             points: u.points || 0,
-            rank: u.rank || 'NORMAL',
+            rank: getEffectiveRank(u),
             role: u.role || 'CUSTOMER',
             username: u.email, // Dùng email làm username hiển thị
           }));
@@ -57,8 +71,11 @@ const AdminCustomers = () => {
     setSelectedUser(u);
     setLoadingOrders(true);
     try {
-      const orders = await getUserOrders(u.id);
-      setSelectedUserOrders(orders || []);
+      const orders = await getUserOrders(u);
+      setSelectedUserOrders(Array.isArray(orders) ? orders : []);
+    } catch (err) {
+      console.warn(`Không thể tải đơn hàng của user ${u.id}:`, err);
+      setSelectedUserOrders([]);
     } finally {
       setLoadingOrders(false);
     }
@@ -328,18 +345,23 @@ const AdminCustomers = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.map((o) => (
+                        {orders.map((o) => {
+                          const statusKey = Number(o.status);
+                          const statusColor = ORDER_STATUS_COLOR[statusKey] || '#757575';
+                          const statusLabel = ORDER_STATUS_LABEL[statusKey] || 'Không xác định';
+                          return (
                           <tr key={o.id}>
                             <td style={{ fontWeight: 700 }}>#{String(o.id).padStart(6, '0')}</td>
                             <td style={{ color: 'var(--text-muted)' }}>{formatDate(o.orderDate)}</td>
                             <td style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(o.totalAmount)}</td>
                             <td>
-                              <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700, background: `${ORDER_STATUS_COLOR[o.status]}18`, color: ORDER_STATUS_COLOR[o.status] }}>
-                                {ORDER_STATUS_LABEL[o.status]}
+                              <span style={{ display: 'inline-flex', padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 700, background: `${statusColor}18`, color: statusColor }}>
+                                {statusLabel}
                               </span>
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

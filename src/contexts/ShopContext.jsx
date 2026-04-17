@@ -422,11 +422,31 @@ export const ShopProvider = ({ children }) => {
     }
   };
 
-  const getUserOrders = async (userId, returnAll = false) => {
-    const res = await api.get('/order');
-    if (!res.data?.data) return [];
+  const getUserOrders = async (userRef, returnAll = false) => {
+    const normalizedUserId = typeof userRef === 'object' ? userRef?.id : userRef;
+    const normalizedUserEmail = typeof userRef === 'object' ? userRef?.email : null;
 
-    const apiOrders = await Promise.all(res.data.data.map(async (o) => {
+    let res;
+    if (!returnAll && normalizedUserId !== undefined && normalizedUserId !== null && String(normalizedUserId) !== '') {
+      // Backend endpoint dedicated for user purchase history.
+      res = await api.get(`/order/get-by-uid?page=1&size=1000&uid=${normalizedUserId}`);
+    } else {
+      try {
+        // Admin/all orders fallback.
+        res = await api.get('/order?page=1&size=1000');
+      } catch {
+        res = await api.get('/order');
+      }
+    }
+    const orderPayload = res?.data?.data;
+    const rawOrders = Array.isArray(orderPayload)
+      ? orderPayload
+      : Array.isArray(orderPayload?.content)
+        ? orderPayload.content
+        : [];
+    if (rawOrders.length === 0) return [];
+
+    const apiOrders = await Promise.all(rawOrders.map(async (o) => {
       let items = [];
       try {
         const detailRes = await api.get(`/order-detail/get-by-orderid?orderId=${o.id}`);
@@ -449,7 +469,8 @@ export const ShopProvider = ({ children }) => {
 
       return {
         id: o.id,
-        userId: o.userId, // Có thể lọc theo user ở Frontend nếu API chưa lọc
+        userId: o.userId ?? o.user?.id ?? o.customerId ?? o.accountId ?? null,
+        userEmail: o.userEmail ?? o.user?.email ?? o.email ?? null,
         orderDate: o.orderDate,
         deliveryAddress: o.deliveryAddress,
         totalAmount: o.totalAmount,
@@ -462,7 +483,17 @@ export const ShopProvider = ({ children }) => {
     setOrders(apiOrders);
 
     // Nếu truyền returnAll = true, trả về toàn bộ. Ngược lại lọc theo userId
-    const finalOrders = returnAll ? apiOrders : apiOrders.filter(o => o.userId === userId);
+    const finalOrders = returnAll
+      ? apiOrders
+      : apiOrders.filter((o) => {
+        if (normalizedUserId !== undefined && normalizedUserId !== null && String(normalizedUserId) !== '') {
+          if (String(o.userId) === String(normalizedUserId)) return true;
+        }
+        if (normalizedUserEmail) {
+          return String(o.userEmail || '').toLowerCase() === String(normalizedUserEmail).toLowerCase();
+        }
+        return false;
+      });
     return finalOrders.sort((a, b) => new Date(b.orderDate) - new Date(a.orderDate));
   };
 

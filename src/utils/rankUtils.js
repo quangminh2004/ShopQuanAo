@@ -53,6 +53,13 @@ export const RANK_CONFIG = {
   },
 };
 
+const RANK_ORDER = ['NORMAL', 'DONG', 'BAC', 'VANG', 'KIM_CUONG'];
+
+export const normalizeRank = (rank) => {
+  const normalized = String(rank || '').trim().toUpperCase();
+  return RANK_CONFIG[normalized] ? normalized : 'NORMAL';
+};
+
 export const getRankFromSpending = (totalSpending) => {
   if (totalSpending >= 50000000) return 'KIM_CUONG';
   if (totalSpending >= 20000000) return 'VANG';
@@ -62,22 +69,23 @@ export const getRankFromSpending = (totalSpending) => {
 };
 
 export const getNextRank = (currentRank) => {
-  const ranks = ['NORMAL', 'DONG', 'BAC', 'VANG', 'KIM_CUONG'];
-  const idx = ranks.indexOf(currentRank);
-  if (idx === ranks.length - 1) return null;
-  return ranks[idx + 1];
+  const safeRank = normalizeRank(currentRank);
+  const idx = RANK_ORDER.indexOf(safeRank);
+  if (idx === RANK_ORDER.length - 1) return null;
+  return RANK_ORDER[idx + 1];
 };
 
 export const getRankProgress = (totalSpending, currentRank) => {
-  const config = RANK_CONFIG[currentRank];
-  const nextRank = getNextRank(currentRank);
+  const safeRank = normalizeRank(currentRank);
+  const config = RANK_CONFIG[safeRank];
+  const nextRank = getNextRank(safeRank);
   if (!nextRank) return 100;
   const nextConfig = RANK_CONFIG[nextRank];
-  const range = nextConfig.minSpending - config.minSpending;
-  const progress = totalSpending - config.minSpending;
-  return Math.min(Math.round((progress / range) * 100), 100);
+  const range = Math.max(nextConfig.minSpending - config.minSpending, 1);
+  const progress = Number(totalSpending || 0) - config.minSpending;
+  return Math.max(0, Math.min(Math.round((progress / range) * 100), 100));
 };
 
 export const getDiscount = (rank) => {
-  return RANK_CONFIG[rank]?.discount || 0;
+  return RANK_CONFIG[normalizeRank(rank)]?.discount || 0;
 };
