@@ -71,7 +71,7 @@ const AdminDashboard = () => {
   }, [stats]);
 
   const statCards = [
-    { icon: '💰', label: 'Doanh thu', value: formatCurrency(totalRevenue), color: 'var(--primary)', trend: 'Hôm nay / Tuần này' },
+    { icon: '💰', label: 'Tổng doanh thu', value: formatCurrency(totalRevenue), color: 'var(--primary)', trend: 'Hôm nay / Tuần này' },
     { icon: '📦', label: 'Tổng đơn hàng', value: totalOrders, color: '#1565c0', trend: 'Tất cả đơn hàng' },
     { icon: '⏳', label: 'Đang xử lý', value: pendingOrders, color: 'var(--warning)', trend: 'Cần xác nhận' },
     { icon: '👥', label: 'Khách hàng', value: totalCustomers, color: 'var(--success)', trend: 'Thành viên đã đăng ký' },
