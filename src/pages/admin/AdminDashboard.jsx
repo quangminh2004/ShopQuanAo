@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useShop } from '../../contexts/ShopContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { formatCurrency } from '../../utils/formatUtils';
 import api from '../../utils/api';
 import AdminLayout from '../../components/layout/AdminLayout';
@@ -20,11 +19,11 @@ const AdminDashboard = () => {
           api.get('/api/v1/admin/dashboard/summary'),
           api.get('/user?page=1&size=1000')
         ]);
-        
+
         if (res.data?.data) {
           setStats(res.data.data);
         }
-        
+
         if (userRes.data?.data?.content) {
           setUsersInfo(userRes.data.data.content);
         } else if (Array.isArray(userRes.data?.data)) {
@@ -44,10 +43,21 @@ const AdminDashboard = () => {
 
   const monthlyData = useMemo(() => {
     if (!stats || !stats.revenueChart) return [];
-    return stats.revenueChart.map(m => ({
-      name: m.month,
-      'Doanh thu (tr)': Math.round((m.revenue || 0) / 1000000),
-      'Đơn hàng': m.orderCount || 0
+    const chartRows = Array.isArray(stats.revenueChart) ? stats.revenueChart : [];
+    const rawRevenueList = chartRows.map((m) => Number(m.revenue ?? m.totalRevenue ?? 0) || 0);
+    const rawRevenueSum = rawRevenueList.reduce((sum, value) => sum + value, 0);
+    const totalRevenueValue = Number(stats.totalRevenue || 0);
+
+    // Some APIs return monthly revenue in "million VND" while totals are in VND.
+    // Detect the likely unit by comparing chart sum vs total revenue.
+    const distanceIfVnd = Math.abs(totalRevenueValue - rawRevenueSum);
+    const distanceIfMillion = Math.abs(totalRevenueValue - (rawRevenueSum * 1000000));
+    const revenueScale = distanceIfMillion < distanceIfVnd ? 1000000 : 1;
+
+    return chartRows.map(m => ({
+      name: m.month || m.label || '',
+      'Doanh thu (đ)': (Number(m.revenue ?? m.totalRevenue ?? 0) || 0) * revenueScale,
+      'Đơn hàng': m.orderCount ?? m.totalOrders ?? 0
     }));
   }, [stats]);
 
@@ -91,20 +101,31 @@ const AdminDashboard = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '20px' }}>
           {/* Revenue Chart */}
           <div className="card">
-            <div className="card-header">📈 Doanh thu 6 tháng gần nhất (triệu ₫)</div>
+            <div className="card-header">📈 Doanh thu 6 tháng gần nhất (₫)</div>
             <div className="card-body">
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={monthlyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9e9e9e' }} />
-                  <YAxis tick={{ fontSize: 12, fill: '#9e9e9e' }} />
+                  <YAxis
+                    yAxisId="revenue"
+                    tick={{ fontSize: 12, fill: '#9e9e9e' }}
+                    tickFormatter={(value) => formatCurrency(Number(value) || 0)}
+                    width={90}
+                  />
+                  <YAxis
+                    yAxisId="orders"
+                    orientation="right"
+                    tick={{ fontSize: 12, fill: '#9e9e9e' }}
+                    allowDecimals={false}
+                  />
                   <Tooltip
-                    formatter={(v, n) => [n === 'Doanh thu (tr)' ? `${v} triệu ₫` : v, n]}
+                    formatter={(v, n) => [n === 'Doanh thu (đ)' ? formatCurrency(Number(v) || 0) : v, n]}
                     contentStyle={{ borderRadius: '10px', border: '1px solid #e0e0e0' }}
                   />
                   <Legend />
-                  <Bar dataKey="Doanh thu (tr)" fill="#ee4d2d" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="Đơn hàng" fill="#ff9052" radius={[6, 6, 0, 0]} />
+                  <Bar yAxisId="revenue" dataKey="Doanh thu (đ)" fill="#ee4d2d" radius={[6, 6, 0, 0]} />
+                  <Bar yAxisId="orders" dataKey="Đơn hàng" fill="#ff9052" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -128,7 +149,7 @@ const AdminDashboard = () => {
                     <p style={{ fontSize: '13px', fontWeight: 600, marginBottom: '2px' }} className="line-clamp-1">{p.name}</p>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Đã bán: {p.quantity} sản phẩm</p>
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)', flexShrink: 0, fontSize: '12px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)', flexShrink: 0 }}>
                     {formatCurrency(p.revenue)}
                   </div>
                 </div>
